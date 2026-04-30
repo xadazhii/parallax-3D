@@ -1,148 +1,148 @@
-# Parallax — AI Hĺbka z Fotografie do 3D priestoru
+# Parallax — AI Depth from a Single Photo to 3D Space
 
-> Semestrálna práca · **B-MSAP**, časť B (Vibecoding Web App)
+> Semester project · **B-MSAP**, Part B (Vibecoding Web App)
 
-Interaktívna webová aplikácia, ktorá z **jedinej fotografie** vytvorí prechádzateľný 3D priestor. Neurónová sieť **Depth Anything V2** odhadne hĺbkovú mapu obrázka priamo v prehliadači, zo zdrojových pixelov sa vyrenderuje 3D mračno bodov v custom WebGL2 enginu.
+An interactive web app that turns a **single photograph** into a walkable 3D space. The **Depth Anything V2** neural network estimates a depth map directly in the browser, and the original pixels are rendered as a 3D point cloud through a custom WebGL2 engine.
 
 🌐 **Live demo:** [xadazhii.github.io/parallax-3D](https://xadazhii.github.io/parallax-3D/)
 
 ---
 
-## ✨ Funkcie
+## ✨ Features
 
-### Vstup
-- 📁 **Drag & drop** ľubovoľnej fotografie (JPG/PNG/WEBP)
-- 📋 **Paste z clipboardu** (Ctrl/Cmd + V)
-- 🖼 **4 ukážkové fotky** (oceán, hory, ulica, les)
-- 🎥 **Webcam Live Mode** — odhadovanie hĺbky v reálnom čase z kamery
+### Input
+- 📁 **Drag & drop** any photo (JPG / PNG / WEBP)
+- 📋 **Paste from clipboard** (Ctrl/Cmd + V)
+- 🖼 **4 sample images** (ocean, mountains, street, forest)
+- 🎥 **Live Webcam Mode** — real-time depth estimation from your camera
 
-### Vizualizácia
-- 🎨 **3 farebné režimy** — pôvodná RGB · gradient hĺbky · normálové vektory
-- 👁 **Anaglyph 3D** (červeno-modré okuliare!)
-- ⟳ **Auto-rotácia** alebo **Wiggle** efekt (Facebook 3D Photo)
-- 🎚 Slidre pre **silu hĺbky**, **veľkosť bodov**, **odrezanie pozadia**
-- 🖼 Mini-náhľad **hĺbkovej mapy** v rohu obrazovky
+### Visualization
+- 🎨 **3 color modes** — original RGB · depth gradient · surface normals
+- 👁 **Anaglyph 3D** (red/cyan glasses!)
+- ⟳ **Auto-rotation** or **Wiggle** effect (Facebook 3D Photo style)
+- 🎚 Sliders for **depth strength**, **point size**, and **background cutoff**
+- 🖼 Mini **depth map preview** in the corner
 
 ### Export
 - ↓ **PNG screenshot**
-- ↓ **`.PLY` súbor** (otvorí sa v MeshLab, Blender, CloudCompare...)
+- ↓ **`.PLY` file** (opens in MeshLab, Blender, CloudCompare, etc.)
 
-### Ovládanie
-- 🖱 **Ľavé tlačidlo** — orbitálna rotácia
-- 🖱 **Pravé tlačidlo** — posun (pan)
+### Controls
+- 🖱 **Left click** — orbital rotation
+- 🖱 **Right click** — pan
 - 🎡 **Scroll** — zoom
-- 📱 **Touch + pinch zoom** na mobile
+- 📱 **Touch + pinch zoom** on mobile
 
 ---
 
-## 🧠 Ako to funguje
+## 🧠 How it works
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│  TVOJ PREHLIADAČ (Chrome / Safari / Firefox)         │
+│  YOUR BROWSER (Chrome / Safari / Firefox)            │
 │                                                       │
-│  Fotografia ──→ Depth Anything V2 (ONNX, ~50 MB)     │
+│  Photo  ──→  Depth Anything V2 (ONNX, ~50 MB)        │
 │                  │                                    │
 │                  ↓ WebGPU / WASM inference            │
 │                                                       │
-│              Hĺbková mapa (Float32Array)              │
+│              Depth map (Float32Array)                 │
 │                  │                                    │
-│                  ↓ + originálne RGB pixely            │
+│                  ↓ + original RGB pixels              │
 │                                                       │
-│              3D Point Cloud (~220k bodov)             │
+│              3D point cloud (~220k points)            │
 │                  │                                    │
 │                  ↓ Custom WebGL2 renderer             │
 │                                                       │
-│              Interaktívna 3D scéna                    │
+│              Interactive 3D scene                     │
 └──────────────────────────────────────────────────────┘
 ```
 
-**Žiadny backend, žiadny server.** Fotografia neopustí tvoj prehliadač.
+**No backend, no server.** Your photo never leaves the browser.
 
 ---
 
-## 🛠 Technologický stack
+## 🛠 Tech stack
 
-| Vrstva | Technológia |
+| Layer | Technology |
 |---|---|
 | **AI / ML** | [Transformers.js](https://github.com/huggingface/transformers.js) v3 + [Depth Anything V2](https://depth-anything-v2.github.io/) |
-| **GPU akcelerácia** | WebGPU (s fallbackom na WebAssembly SIMD) |
-| **3D rendering** | Custom WebGL2 point-cloud engine (vlastné shadery) |
-| **Idle pozadie** | Canvas 2D parallax starfield |
-| **Ostatné** | Vanilla JS, žiadny build step, jeden HTML súbor |
+| **GPU acceleration** | WebGPU (with WebAssembly SIMD fallback) |
+| **3D rendering** | Custom WebGL2 point-cloud engine (custom shaders) |
+| **Idle background** | Canvas 2D parallax starfield |
+| **Other** | Vanilla JS, no build step, single HTML file |
 
-### Vlastné implementácie
-- **Bilateral depth smoothing** — 3×3 edge-aware filter na elimináciu artefaktov
-- **Real-time background cutoff** v vertex shaderi
-- **Anaglyph rendering** s color masking a IPD eye-offset
-- **Normal-vector estimation** z gradientu hĺbkovej mapy
-- **Counting-style point cloud builder** s adaptívnym strideom
+### Custom implementations
+- **Bilateral depth smoothing** — 3×3 edge-aware filter to remove artifacts
+- **Real-time background cutoff** in the vertex shader
+- **Anaglyph rendering** with color masking and IPD eye-offset
+- **Surface-normal estimation** from depth-map gradient
+- **Adaptive-stride point cloud builder** for performance scaling
 
 ---
 
-## 🚀 Lokálne spustenie
+## 🚀 Running locally
 
-ES moduly vyžadujú HTTP server (nefungujú cez `file://`):
+ES modules require an HTTP server (they don't work over `file://`):
 
 ```bash
-# Klonovanie
+# Clone
 git clone https://github.com/xadazhii/parallax-3D.git
 cd parallax-3D
 
-# Spustenie cez Python
+# Serve via Python
 python3 -m http.server 8000
-# alebo Node:
+# or Node:
 npx serve .
 
-# Otvor v prehliadači:
+# Open in browser:
 # http://localhost:8000
 ```
 
-**Prvý spustenie:** stiahne sa Depth Anything V2 model (~50 MB) z HuggingFace CDN. Ďalšie spustenia bežia okamžite zo cache prehliadača.
+**First run:** the Depth Anything V2 model (~50 MB) is downloaded once from the HuggingFace CDN. Subsequent runs load instantly from the browser cache.
 
 ---
 
-## 📁 Štruktúra repozitára
+## 📁 Repository structure
 
 ```
 parallax-3D/
-├── index.html       # Celá aplikácia (HTML + CSS + JS inline)
-├── thumbnail.png    # Náhľad pre portál (1000×1000)
-└── README.md        # Tento súbor
+├── index.html       # The whole app (HTML + CSS + JS inline)
+├── thumbnail.png    # Portal preview (1000×1000)
+└── README.md        # This file
 ```
 
 ---
 
-## ⚙️ Kompatibilita
+## ⚙️ Compatibility
 
-| Prehliadač | WebGPU | WASM fallback | Webcam |
+| Browser | WebGPU | WASM fallback | Webcam |
 |---|---|---|---|
 | Chrome / Edge 113+ | ✅ | ✅ | ✅ |
 | Safari 17+ | ⚠️ | ✅ | ✅ |
 | Firefox | ❌ | ✅ | ✅ |
 
-WebGPU dáva inferenciu ~5–10× rýchlejšiu ako WASM, ale aplikácia funguje aj bez nej.
+WebGPU makes inference ~5–10× faster than WASM, but the app works fine without it.
 
 ---
 
-## 📚 Kontext zadania
+## 📚 Assignment context
 
-**Predmet:** B-MSAP (Multimediálne systémy a aplikácie v praxi)
-**Časť:** B — Vibecoding Web App
-**Autor:** Kristína Adazhii
-**Médium:** Image → 3D
-**Téma:** AI rekonštrukcia 3D priestoru z jednej fotografie pomocou monoculárneho odhadu hĺbky
+**Course:** B-MSAP (Multimedia Systems and Applications in Practice)
+**Part:** B — Vibecoding Web App
+**Author:** Kristína Adazhii
+**Medium:** Image → 3D
+**Topic:** AI 3D-space reconstruction from a single photograph using monocular depth estimation
 
-### Splnené požiadavky zadania
-- ✅ 100 % client-side, žiadny backend
-- ✅ Tlačidlo *« Späť na portál »* v rohu
-- ✅ `thumbnail.png` presne 1000 × 1000 px
-- ✅ WOW efekt — reálna AI inferencia v prehliadači + 3D anaglyph + live webcam
-- ✅ Spracováva študentské médium (Image)
-- ✅ Použité štandardy z umožnených technológií (WebGL, WebAssembly, Canvas)
+### Assignment requirements satisfied
+- ✅ 100 % client-side, no backend
+- ✅ « Späť na portál » back button in the corner
+- ✅ `thumbnail.png` exactly 1000 × 1000 px
+- ✅ WOW effect — real in-browser AI inference + 3D anaglyph + live webcam
+- ✅ Processes a student medium (Image)
+- ✅ Uses only allowed standards (WebGL, WebAssembly, Canvas)
 
 ---
 
-## 📄 Licencia
+## 📄 License
 
-Creative Commons **CC BY 4.0** — voľne dostupné pre vzdelávacie účely.
+Creative Commons **CC BY 4.0** — free for educational use.
