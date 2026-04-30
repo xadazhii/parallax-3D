@@ -558,7 +558,7 @@ function loadImage(file) {
 //  WEBGL2 RENDERER
 // ─────────────────────────────────────────────────────────────
 const glC = $('gl');
-const gl = glC.getContext('webgl2', { antialias: true, alpha: false, premultipliedAlpha: false });
+const gl = glC.getContext('webgl2', { antialias: true, alpha: false, premultipliedAlpha: false, preserveDrawingBuffer: true });
 if (!gl) showToast('WebGL2 nie je dostupný v tomto prehliadači.');
 
 const VS = `#version 300 es
