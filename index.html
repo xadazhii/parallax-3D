@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Parallax — AI Hĺbka z Fotografie do 3D</title>
+<style>
+:root{--cyan:#00d4ff;--blue:#1a6aff;--text:#a8d4f0;--muted:#2a4f70;--bg:#030810;--err:#ff6688;--ok:#00ff88}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;
+    overflow:hidden;width:100vw;height:100vh;user-select:none}
+canvas{position:fixed;inset:0;width:100%;height:100%}
+#bg{z-index:0}
+#gl{z-index:1;display:none}
+
+.back-btn{position:fixed;top:22px;left:22px;z-index:999;display:flex;align-items:center;gap:8px;
+    color:var(--cyan);text-decoration:none;font-size:12px;letter-spacing:1px;
+    padding:7px 18px 7px 14px;border:1px solid rgba(0,212,255,.28);border-radius:30px;
+    backdrop-filter:blur(18px);background:rgba(3,8,16,.75);transition:all .3s}
+.back-btn:hover{background:rgba(0,212,255,.1);border-color:rgba(0,212,255,.65);
+    box-shadow:0 0 20px rgba(0,212,255,.22);transform:translateX(-3px)}
+
+#upload{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;padding:20px}
+.hero{text-align:center;margin-bottom:32px;animation:fadeUp .8s ease both}
+.hero-title{font-size:52px;font-weight:200;letter-spacing:14px;text-transform:uppercase;color:#fff;
+    text-shadow:0 0 40px rgba(0,212,255,.5),0 0 80px rgba(0,100,255,.25);line-height:1}
+.hero-title span{color:var(--cyan)}
+.hero-sub{font-size:12px;letter-spacing:4px;color:var(--muted);margin-top:10px;text-transform:uppercase}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+.drop{width:520px;max-width:92vw;border:1px solid rgba(0,212,255,.22);border-radius:18px;
+    backdrop-filter:blur(30px);background:rgba(5,12,30,.82);
+    transition:all .35s;animation:fadeUp .8s .15s ease both;overflow:hidden;position:relative;
+    padding:34px 36px 28px;text-align:center}
+.drop::before{content:'';position:absolute;inset:0;pointer-events:none;
+    background:linear-gradient(135deg,rgba(0,212,255,.04) 0%,transparent 50%,rgba(26,106,255,.03) 100%)}
+.drop.over{border-color:rgba(0,212,255,.55);
+    box-shadow:0 0 50px rgba(0,212,255,.12),0 20px 60px rgba(0,0,0,.5)}
+.drop-icon{width:64px;height:64px;margin:0 auto 12px;border:1px solid rgba(0,212,255,.25);border-radius:50%;
+    display:flex;align-items:center;justify-content:center;font-size:28px;
+    background:rgba(0,212,255,.06);animation:float 4s ease-in-out infinite;
+    box-shadow:0 0 30px rgba(0,212,255,.1)}
+@keyframes float{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-6px) scale(1.04)}}
+.drop-title{font-size:16px;font-weight:400;color:#fff;letter-spacing:.5px;margin-bottom:6px}
+.drop-desc{font-size:12px;color:var(--muted);line-height:1.6;max-width:380px;margin:0 auto 14px}
+.fmt-badges{display:flex;gap:8px;justify-content:center;margin-bottom:16px;flex-wrap:wrap}
+.fmt-badge{padding:4px 12px;border:1px solid rgba(0,212,255,.22);border-radius:20px;
+    font-size:10px;letter-spacing:1.5px;color:var(--cyan);background:rgba(0,212,255,.06)}
+
+.actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:6px}
+.btn{padding:11px 22px;background:linear-gradient(135deg,rgba(0,212,255,.15),rgba(26,106,255,.15));
+    border:1px solid rgba(0,212,255,.35);border-radius:10px;color:var(--cyan);
+    font-size:12px;letter-spacing:1px;cursor:pointer;transition:all .25s;text-transform:uppercase}
+.btn:hover{background:linear-gradient(135deg,rgba(0,212,255,.25),rgba(26,106,255,.25));
+    box-shadow:0 0 20px rgba(0,212,255,.2)}
+.btn.alt{background:linear-gradient(135deg,rgba(255,80,180,.12),rgba(255,40,120,.12));
+    border-color:rgba(255,100,180,.35);color:#ff7fc8}
+.btn.alt:hover{background:linear-gradient(135deg,rgba(255,80,180,.22),rgba(255,40,120,.22));
+    box-shadow:0 0 20px rgba(255,80,180,.2)}
+#fileInput{display:none}
+
+.samples{margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;
+    animation:fadeUp .8s .3s ease both}
+.sample{padding:6px 14px;border:1px solid rgba(0,212,255,.15);border-radius:20px;
+    font-size:10px;color:var(--muted);background:rgba(3,9,24,.6);cursor:pointer;
+    transition:all .2s;letter-spacing:.5px;text-transform:uppercase}
+.sample:hover{border-color:rgba(0,212,255,.5);color:var(--cyan)}
+
+.feats{margin-top:24px;display:flex;gap:10px;animation:fadeUp .8s .35s ease both;flex-wrap:wrap;justify-content:center}
+.feat{display:flex;align-items:center;gap:7px;padding:7px 14px;border:1px solid rgba(0,212,255,.1);
+    border-radius:20px;background:rgba(3,9,24,.6);backdrop-filter:blur(10px);
+    font-size:10px;color:var(--muted);letter-spacing:.5px}
+.feat-dot{width:6px;height:6px;border-radius:50%;background:var(--cyan);box-shadow:0 0 6px var(--cyan)}
+
+#loading{position:fixed;inset:0;z-index:600;display:none;flex-direction:column;
+    align-items:center;justify-content:center;background:rgba(3,8,16,.94);backdrop-filter:blur(12px)}
+#loading.show{display:flex}
+.spin{width:64px;height:64px;border:2px solid rgba(0,212,255,.15);border-top-color:var(--cyan);
+    border-radius:50%;animation:spin 1s linear infinite;margin-bottom:22px;box-shadow:0 0 20px rgba(0,212,255,.2)}
+@keyframes spin{to{transform:rotate(360deg)}}
+#ldStatus{font-size:12px;letter-spacing:2px;color:var(--cyan);text-transform:uppercase;
+    margin-bottom:18px;text-align:center;max-width:80%}
+.ld-bar{width:280px;height:2px;background:rgba(0,212,255,.12);border-radius:2px;overflow:hidden}
+.ld-fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--cyan));
+    box-shadow:0 0 8px rgba(0,212,255,.6);width:0%;transition:width .3s}
+#ldPct{font-size:11px;color:var(--muted);margin-top:8px;letter-spacing:1px}
+#ldNote{font-size:10px;color:var(--muted);margin-top:18px;max-width:60%;text-align:center;
+    line-height:1.6;opacity:.65}
+
+#newBtn{position:fixed;top:22px;left:50%;transform:translateX(-50%);z-index:999;
+    display:none;align-items:center;gap:8px;padding:7px 20px;
+    border:1px solid rgba(0,212,255,.28);border-radius:30px;
+    backdrop-filter:blur(18px);background:rgba(3,8,16,.75);
+    color:var(--cyan);font-size:12px;letter-spacing:1px;cursor:pointer;transition:all .3s}
+#newBtn.show{display:flex}
+#newBtn:hover{background:rgba(0,212,255,.1);border-color:rgba(0,212,255,.65);
+    box-shadow:0 0 20px rgba(0,212,255,.22)}
+
+#info{position:fixed;top:22px;right:22px;z-index:999;display:none;text-align:right;pointer-events:none}
+#info.show{display:block}
+#infoName{font-size:13px;color:var(--cyan);max-width:260px;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap}
+#infoMeta{font-size:10px;color:var(--muted);margin-top:3px;letter-spacing:1px}
+
+#hint{position:fixed;top:78px;right:22px;z-index:999;display:none;
+    padding:9px 14px;border:1px solid rgba(0,212,255,.12);border-radius:12px;
+    backdrop-filter:blur(20px);background:rgba(3,8,22,.78);
+    font-size:10px;color:var(--muted);letter-spacing:.5px;line-height:1.7}
+#hint.show{display:block}
+#hint strong{color:var(--cyan);font-weight:400}
+
+#controls{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:999;
+    display:none;gap:14px;padding:10px 18px;border:1px solid rgba(0,212,255,.18);
+    border-radius:30px;backdrop-filter:blur(20px);background:rgba(3,8,22,.78);
+    align-items:center;flex-wrap:nowrap;max-width:calc(100vw - 40px);overflow-x:auto}
+#controls.show{display:flex}
+#controls::-webkit-scrollbar{display:none}
+.ctrl{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.ctrl label{font-size:9px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;white-space:nowrap}
+.ctrl input[type=range]{width:70px;accent-color:var(--cyan);cursor:pointer}
+.icon-btn{padding:6px 11px;background:transparent;border:1px solid rgba(0,212,255,.22);
+    border-radius:18px;color:var(--cyan);cursor:pointer;font-size:10px;
+    transition:all .2s;letter-spacing:1px;text-transform:uppercase;white-space:nowrap;flex-shrink:0}
+.icon-btn:hover{background:rgba(0,212,255,.1);border-color:rgba(0,212,255,.5)}
+.icon-btn.active{background:rgba(0,212,255,.18);border-color:rgba(0,212,255,.7);box-shadow:0 0 12px rgba(0,212,255,.25)}
+.icon-btn.alt.active{background:rgba(255,100,150,.18);border-color:rgba(255,100,150,.7);
+    box-shadow:0 0 12px rgba(255,100,150,.3);color:#ff8fc0}
+.divider-v{width:1px;height:18px;background:rgba(0,212,255,.15);flex-shrink:0}
+
+#depthMini{position:fixed;bottom:22px;right:22px;z-index:998;display:none;
+    width:140px;height:140px;border:1px solid rgba(0,212,255,.25);border-radius:10px;
+    overflow:hidden;background:rgba(3,8,22,.78);backdrop-filter:blur(10px)}
+#depthMini.show{display:block}
+#depthMini canvas{position:relative;width:100%;height:100%}
+#depthMini::after{content:'HĹBKA';position:absolute;top:6px;left:8px;font-size:9px;
+    letter-spacing:2px;color:var(--cyan);text-shadow:0 0 4px rgba(3,8,16,.9);pointer-events:none}
+
+#liveTag{position:fixed;top:22px;left:50%;transform:translateX(-50%);z-index:1000;
+    display:none;align-items:center;gap:8px;padding:6px 14px;border-radius:20px;
+    background:rgba(255,40,80,.18);border:1px solid rgba(255,80,120,.5);
+    color:#ff7799;font-size:10px;letter-spacing:2px;text-transform:uppercase}
+#liveTag.show{display:flex}
+.live-dot{width:7px;height:7px;border-radius:50%;background:#ff5577;
+    box-shadow:0 0 8px #ff5577;animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+#toast{position:fixed;top:80px;left:50%;transform:translateX(-50%);z-index:999;
+    display:none;padding:10px 22px;border:1px solid rgba(255,60,80,.4);border-radius:8px;
+    background:rgba(40,3,8,.9);backdrop-filter:blur(12px);color:var(--err);font-size:12px;
+    max-width:80vw;text-align:center}
+#toast.show{display:block}
+#toast.ok{border-color:rgba(0,212,255,.4);background:rgba(3,20,30,.9);color:var(--cyan)}
+
+@media(max-width:600px){
+    .hero-title{font-size:36px;letter-spacing:8px}
+    .drop{padding:24px 18px}
+    #controls{gap:8px;padding:8px 12px}
+    .ctrl input[type=range]{width:50px}
+    .ctrl label{font-size:8px}
+    .icon-btn{padding:5px 8px;font-size:9px}
+    #depthMini{width:90px;height:90px}
+    #hint{font-size:9px}
+}
+</style>
+</head>
+<body>
+
+<canvas id="bg"></canvas>
+<canvas id="gl"></canvas>
+
+<a href="#" class="back-btn" onclick="history.length>1?history.back():void(0);return false">
+    <span style="font-size:16px">←</span><span>Späť na portál</span>
+</a>
+
+<!-- ── UPLOAD SCREEN ── -->
+<div id="upload">
+    <div class="hero">
+        <div class="hero-title">Para<span>llax</span></div>
+        <div class="hero-sub">AI Hĺbka · Fotografia → 3D priestor</div>
+    </div>
+    <div class="drop" id="drop">
+        <div class="drop-icon">⬡</div>
+        <div class="drop-title">Nahraj fotku — vstúp do nej</div>
+        <div class="drop-desc">
+            Neurónová sieť <strong style="color:var(--cyan)">Depth Anything V2</strong> odhadne hĺbkovú mapu
+            z jediného obrázka. Z pixelov vznikne 3D mračno bodov, ktoré môžeš obísť kamerou.
+        </div>
+        <div class="fmt-badges">
+            <span class="fmt-badge">JPG · PNG · WEBP</span>
+            <span class="fmt-badge">100% V PREHLIADAČI</span>
+            <span class="fmt-badge" id="devBadge">WEBGPU/WASM</span>
+        </div>
+        <div class="actions">
+            <button class="btn" onclick="document.getElementById('fileInput').click()">↑ &nbsp;Vybrať fotku</button>
+            <button class="btn alt" id="webcamBtn">⏺ &nbsp;Live Webcam</button>
+        </div>
+        <input type="file" id="fileInput" accept="image/*">
+        <div class="samples">
+            <span class="sample" data-url="https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=800">Oceán</span>
+            <span class="sample" data-url="https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800">Hory</span>
+            <span class="sample" data-url="https://images.unsplash.com/photo-1444723121867-7a241cacace9?w=800">Ulica</span>
+            <span class="sample" data-url="https://images.unsplash.com/photo-1517411032315-54ef2cb783bb?w=800">Les</span>
+        </div>
+    </div>
+    <div class="feats">
+        <div class="feat"><div class="feat-dot"></div>Žiadny server, žiadne nahrávanie</div>
+        <div class="feat"><div class="feat-dot"></div>WebGPU akcelerácia</div>
+        <div class="feat"><div class="feat-dot"></div>Live Webcam · Anaglyph 3D · PLY export</div>
+    </div>
+</div>
+
+<!-- ── LOADING ── -->
+<div id="loading">
+    <div class="spin"></div>
+    <div id="ldStatus">Inicializujem…</div>
+    <div class="ld-bar"><div class="ld-fill" id="ldFill"></div></div>
+    <div id="ldPct">0 %</div>
+    <div id="ldNote">Pri prvom spustení sa stiahne neurónová sieť (~50 MB). Ďalšie fotky bežia okamžite zo cache.</div>
+</div>
+
+<!-- ── VIEWER UI ── -->
+<button id="newBtn" onclick="window.parallax.reset()">⬡ &nbsp;Nová fotka</button>
+<div id="liveTag"><div class="live-dot"></div>Live · Webcam</div>
+<div id="info"><div id="infoName">—</div><div id="infoMeta">Depth Anything V2</div></div>
+<div id="hint">
+    <strong>🖱 Ľavé</strong> Rotácia<br>
+    <strong>🖱 Pravé</strong> Posun<br>
+    <strong>🎡 Scroll</strong> Zoom
+</div>
+
+<div id="controls">
+    <div class="ctrl"><label>Hĺbka</label><input type="range" id="depthSld" min="0.2" max="3" step="0.05" value="1.2"></div>
+    <div class="ctrl"><label>Body</label><input type="range" id="sizeSld" min="1" max="10" step="0.5" value="3"></div>
+    <div class="ctrl"><label>Pozadie</label><input type="range" id="bgSld" min="0" max="0.95" step="0.01" value="0"></div>
+    <div class="divider-v"></div>
+    <button class="icon-btn" id="rotBtn">⟳ Auto</button>
+    <button class="icon-btn" id="wigBtn">∿ Wiggle</button>
+    <button class="icon-btn" id="modeBtn">◐ Farba</button>
+    <button class="icon-btn alt" id="anaBtn">👁 3D</button>
+    <div class="divider-v"></div>
+    <button class="icon-btn" onclick="window.parallax.shot()">↓ PNG</button>
+    <button class="icon-btn" onclick="window.parallax.exportPLY()">↓ PLY</button>
+</div>
+
+<div id="depthMini"><canvas id="dpCv"></canvas></div>
+<div id="toast"></div>
+
+<script type="module">
+// ═════════════════════════════════════════════════════════════
+//  PARALLAX — Single-image Monocular Depth → 3D Point Cloud
+//  Stack: Transformers.js (Depth Anything V2) + WebGL2
+//  Features: smoothing, BG cutoff, anaglyph, wiggle, normals, PLY, live webcam
+// ═════════════════════════════════════════════════════════════
+
+const $ = id => document.getElementById(id);
+const showToast = (msg, ok=false) => {
+    const t = $('toast'); t.textContent = msg;
+    t.classList.toggle('ok', ok); t.classList.add('show');
+    clearTimeout(t._tm); t._tm = setTimeout(() => t.classList.remove('show'), 5500);
+};
+
+// ─────────────────────────────────────────────────────────────
+//  IDLE BACKGROUND — parallax starfield + grid
+// ─────────────────────────────────────────────────────────────
+const bgC = $('bg'), bgX = bgC.getContext('2d');
+let BW=0, BH=0;
+const bgResize = () => { BW = bgC.width = innerWidth; BH = bgC.height = innerHeight; };
+bgResize(); addEventListener('resize', bgResize);
+
+const LAYERS = [];
+for (let l = 0; l < 4; l++) {
+    const dots = [], N = 60 + l * 25;
+    for (let i = 0; i < N; i++) {
+        dots.push({ x:Math.random(), y:Math.random(), r:(l+1)*(0.4+Math.random()*0.7),
+            a:0.08+Math.random()*(l*0.12+0.18), tw:Math.random()*Math.PI*2, tws:0.005+Math.random()*0.015 });
+    }
+    LAYERS.push({ dots, parallax: (l+1)*0.02 });
+}
+
+let bgMX=0, bgMY=0, bgRaf;
+addEventListener('mousemove', e => {
+    bgMX = (e.clientX/innerWidth - 0.5) * 2;
+    bgMY = (e.clientY/innerHeight - 0.5) * 2;
+});
+
+function drawBg() {
+    bgRaf = requestAnimationFrame(drawBg);
+    bgX.fillStyle = '#030810'; bgX.fillRect(0,0,BW,BH);
+    const grd = bgX.createRadialGradient(BW/2, BH*0.4, 0, BW/2, BH*0.4, Math.max(BW,BH)*0.7);
+    grd.addColorStop(0, 'rgba(15,40,80,.35)');
+    grd.addColorStop(.5, 'rgba(8,18,40,.15)');
+    grd.addColorStop(1, 'rgba(0,0,0,0)');
+    bgX.fillStyle = grd; bgX.fillRect(0,0,BW,BH);
+
+    bgX.strokeStyle = 'rgba(0,212,255,.035)'; bgX.lineWidth = 1;
+    const GS = 80;
+    bgX.beginPath();
+    for (let x = 0; x < BW; x += GS) { bgX.moveTo(x,0); bgX.lineTo(x,BH); }
+    for (let y = 0; y < BH; y += GS) { bgX.moveTo(0,y); bgX.lineTo(BW,y); }
+    bgX.stroke();
+
+    for (const layer of LAYERS) {
+        const ox = -bgMX*layer.parallax*BW, oy = -bgMY*layer.parallax*BH;
+        for (const d of layer.dots) {
+            d.tw += d.tws;
+            const tw = (Math.sin(d.tw)+1)*0.5;
+            const x = d.x*BW + ox, y = d.y*BH + oy;
+            const a = d.a * (0.3 + tw*0.7);
+            const g = bgX.createRadialGradient(x,y,0,x,y,d.r*5);
+            g.addColorStop(0, `rgba(0,212,255,${a})`);
+            g.addColorStop(.5, `rgba(0,140,255,${a*.4})`);
+            g.addColorStop(1, 'rgba(0,0,0,0)');
+            bgX.fillStyle = g;
+            bgX.beginPath(); bgX.arc(x,y,d.r*5,0,Math.PI*2); bgX.fill();
+        }
+    }
+}
+drawBg();
+
+// ─────────────────────────────────────────────────────────────
+//  FILE / DROP HANDLERS
+// ─────────────────────────────────────────────────────────────
+const drop = $('drop');
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', e => {
+    e.preventDefault(); drop.classList.remove('over');
+    const f = e.dataTransfer.files[0];
+    if (f) processFile(f);
+});
+$('fileInput').addEventListener('change', e => {
+    if (e.target.files[0]) processFile(e.target.files[0]);
+});
+addEventListener('paste', e => {
+    if ($('upload').style.display === 'none') return;
+    const items = e.clipboardData?.items || [];
+    for (const it of items) {
+        if (it.type.startsWith('image/')) { processFile(it.getAsFile()); return; }
+    }
+});
+
+document.querySelectorAll('.sample').forEach(el => {
+    el.addEventListener('click', async () => {
+        try {
+            $('ldStatus').textContent = 'Sťahujem ukážku…';
+            $('ldNote').textContent = '';
+            $('upload').style.display = 'none';
+            $('loading').classList.add('show');
+            setProg(20);
+            const r = await fetch(el.dataset.url);
+            if (!r.ok) throw new Error('Fetch failed');
+            const blob = await r.blob();
+            setProg(60);
+            await processFile(new File([blob], el.textContent + '.jpg', { type: blob.type }));
+        } catch (e) {
+            $('loading').classList.remove('show');
+            $('upload').style.display = 'flex';
+            showToast('Ukážku sa nepodarilo stiahnuť: ' + e.message);
+        }
+    });
+});
+
+// ─────────────────────────────────────────────────────────────
+//  ML PIPELINE — Depth Anything V2
+// ─────────────────────────────────────────────────────────────
+let depthEstimator = null;
+let _device = 'wasm';
+const setProg = p => { $('ldFill').style.width = p+'%'; $('ldPct').textContent = Math.round(p)+' %'; };
+
+async function ensureModel() {
+    if (depthEstimator) return;
+    $('ldStatus').textContent = 'Načítavam Transformers.js…';
+    $('ldNote').textContent = 'Pri prvom spustení sa stiahne neurónová sieť (~50 MB). Ďalšie fotky bežia okamžite zo cache.';
+    setProg(2);
+
+    const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0');
+    env.allowLocalModels = false;
+
+    const cb = data => {
+        if (data.status === 'progress' && data.progress != null) {
+            const pct = Math.max(2, Math.min(99, data.progress));
+            setProg(pct);
+            const file = data.file ? data.file.split('/').pop() : 'model';
+            $('ldStatus').textContent = `Sťahujem ${file}: ${Math.round(pct)} %`;
+        } else if (data.status === 'done') {
+            $('ldStatus').textContent = 'Inicializujem model…';
+        } else if (data.status === 'ready') { setProg(100); }
+    };
+    const opts = { progress_callback: cb, dtype: 'fp32' };
+
+    if (navigator.gpu) {
+        try {
+            depthEstimator = await pipeline('depth-estimation', 'onnx-community/depth-anything-v2-small', { ...opts, device: 'webgpu' });
+            _device = 'webgpu';
+            $('devBadge').textContent = 'WEBGPU ✓';
+            return;
+        } catch (e) { console.warn('WebGPU init failed:', e); }
+    }
+    depthEstimator = await pipeline('depth-estimation', 'onnx-community/depth-anything-v2-small', opts);
+    _device = 'wasm';
+    $('devBadge').textContent = 'WASM ✓';
+}
+
+async function estimateDepth(file) {
+    $('ldStatus').textContent = 'AI analyzuje hĺbku scény…';
+    $('ldNote').textContent = '';
+    let fp = 0;
+    setProg(0);
+    const fpT = setInterval(() => { fp = Math.min(fp + Math.random()*5 + 1, 92); setProg(fp); }, 90);
+    try {
+        const url = URL.createObjectURL(file);
+        const result = await depthEstimator(url);
+        URL.revokeObjectURL(url);
+        clearInterval(fpT); setProg(100);
+        return result;
+    } catch (e) { clearInterval(fpT); throw e; }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  DEPTH SMOOTHING (bilateral-ish 3x3)
+//  Reduces "floating object" artifacts on flat colored regions
+// ─────────────────────────────────────────────────────────────
+function smoothDepth(d, W, H) {
+    const out = new Float32Array(d.length);
+    for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+            const ci = y*W + x, cv = d[ci];
+            let sum = 0, wsum = 0;
+            for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+                const ny = y+dy, nx = x+dx;
+                if (nx<0||nx>=W||ny<0||ny>=H) continue;
+                const nv = d[ny*W + nx];
+                const w = Math.exp(-Math.abs(nv - cv) * 8);
+                sum += nv * w; wsum += w;
+            }
+            out[ci] = sum / wsum;
+        }
+    }
+    return out;
+}
+
+// ─────────────────────────────────────────────────────────────
+//  POINT CLOUD BUILDER  (computes positions, colors, depths, normals)
+// ─────────────────────────────────────────────────────────────
+let lastCloud = null;
+
+async function buildCloud(file, depthResult) {
+    const t = depthResult.predicted_depth;
+    let dH, dW;
+    if (t.dims.length === 3) { [, dH, dW] = t.dims; } else { [dH, dW] = t.dims; }
+    let dData = t.data;
+
+    // Smooth twice for a strong but edge-aware filter
+    dData = smoothDepth(dData, dW, dH);
+    dData = smoothDepth(dData, dW, dH);
+
+    let dMin = Infinity, dMax = -Infinity;
+    for (let i = 0; i < dData.length; i++) {
+        if (dData[i] < dMin) dMin = dData[i];
+        if (dData[i] > dMax) dMax = dData[i];
+    }
+    const dRange = (dMax - dMin) || 1;
+
+    const img = await loadImage(file);
+    const tcv = document.createElement('canvas');
+    tcv.width = dW; tcv.height = dH;
+    const tctx = tcv.getContext('2d', { willReadFrequently: true });
+    tctx.drawImage(img, 0, 0, dW, dH);
+    const cd = tctx.getImageData(0, 0, dW, dH).data;
+
+    const total = dW * dH;
+    const targetMax = 220000;
+    const stride = total > targetMax ? Math.ceil(Math.sqrt(total / targetMax)) : 1;
+
+    // Mini depth preview
+    const dpCv = $('dpCv');
+    dpCv.width = dW; dpCv.height = dH;
+    const dpCtx = dpCv.getContext('2d');
+    const dpImg = dpCtx.createImageData(dW, dH);
+    for (let i = 0; i < dW*dH; i++) {
+        const v = ((dData[i] - dMin) / dRange) * 255;
+        dpImg.data[i*4] = v; dpImg.data[i*4+1] = v; dpImg.data[i*4+2] = v; dpImg.data[i*4+3] = 255;
+    }
+    dpCtx.putImageData(dpImg, 0, 0);
+
+    const aspect = dW / dH;
+    const cols = Math.ceil(dW/stride), rows = Math.ceil(dH/stride);
+    const cnt = cols * rows;
+    const positions = new Float32Array(cnt * 3);
+    const colors = new Float32Array(cnt * 3);
+    const depths = new Float32Array(cnt);
+    const normals = new Float32Array(cnt * 3);
+
+    let idx = 0;
+    for (let y = 0; y < dH; y += stride) {
+        for (let x = 0; x < dW; x += stride) {
+            const di = y*dW + x;
+            const dn = (dData[di] - dMin) / dRange;
+            const px = ((x / (dW-1)) - 0.5) * 2 * aspect;
+            const py = -((y / (dH-1)) - 0.5) * 2;
+            positions[idx*3] = px; positions[idx*3+1] = py; positions[idx*3+2] = 0;
+            const ci = di * 4;
+            colors[idx*3] = cd[ci]/255; colors[idx*3+1] = cd[ci+1]/255; colors[idx*3+2] = cd[ci+2]/255;
+            depths[idx] = dn;
+            idx++;
+        }
+    }
+    const total2 = idx;
+
+    // Compute normals from depth gradient
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            const i = r * cols + c;
+            if (i >= total2) break;
+            const li = c > 0 ? i-1 : i;
+            const ri = c < cols-1 ? i+1 : i;
+            const ui = r > 0 ? i-cols : i;
+            const di_ = r < rows-1 ? i+cols : i;
+            const tx = positions[ri*3] - positions[li*3];
+            const ty = 0;
+            const tz = -(depths[ri] - depths[li]);
+            const bx = 0;
+            const by = positions[di_*3+1] - positions[ui*3+1];
+            const bz = -(depths[di_] - depths[ui]);
+            // n = t × b
+            const nx = ty*bz - tz*by;
+            const ny = tz*bx - tx*bz;
+            const nz = tx*by - ty*bx;
+            const nl = Math.hypot(nx, ny, nz) || 1;
+            normals[i*3] = nx/nl; normals[i*3+1] = ny/nl; normals[i*3+2] = nz/nl;
+        }
+    }
+
+    const cloud = {
+        positions: positions.subarray(0, total2*3),
+        colors: colors.subarray(0, total2*3),
+        depths: depths.subarray(0, total2),
+        normals: normals.subarray(0, total2*3),
+        count: total2, W: dW, H: dH, aspect
+    };
+    lastCloud = cloud;
+    return cloud;
+}
+
+function loadImage(file) {
+    return new Promise((res, rej) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => { URL.revokeObjectURL(url); res(img); };
+        img.onerror = e => { URL.revokeObjectURL(url); rej(e); };
+        img.src = url;
+    });
+}
+
+// ─────────────────────────────────────────────────────────────
+//  WEBGL2 RENDERER
+// ─────────────────────────────────────────────────────────────
+const glC = $('gl');
+const gl = glC.getContext('webgl2', { antialias: true, alpha: false, premultipliedAlpha: false });
+if (!gl) showToast('WebGL2 nie je dostupný v tomto prehliadači.');
+
+const VS = `#version 300 es
+precision highp float;
+in vec3 a_pos;
+in vec3 a_col;
+in float a_depth;
+in vec3 a_normal;
+uniform mat4 u_mvp;
+uniform float u_depthScale;
+uniform float u_pointSize;
+uniform float u_colorMode;
+uniform float u_bgCutoff;
+out vec3 v_col;
+out float v_d;
+out float v_visible;
+void main(){
+    if (a_depth < u_bgCutoff) {
+        gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+        gl_PointSize = 0.0;
+        v_col = vec3(0.0); v_d = 0.0; v_visible = 0.0;
+        return;
+    }
+    v_visible = 1.0;
+    float z = -(1.0 - a_depth) * u_depthScale;
+    vec4 p = u_mvp * vec4(a_pos.x, a_pos.y, z, 1.0);
+    gl_Position = p;
+    gl_PointSize = u_pointSize / max(0.4, p.w);
+    if (u_colorMode < 0.5) {
+        v_col = a_col;
+    } else if (u_colorMode < 1.5) {
+        vec3 near = vec3(0.0, 0.83, 1.0);
+        vec3 far  = vec3(0.05, 0.05, 0.30);
+        v_col = mix(far, near, a_depth);
+    } else {
+        v_col = a_normal * 0.5 + 0.5;
+    }
+    v_d = a_depth;
+}`;
+
+const FS = `#version 300 es
+precision highp float;
+in vec3 v_col;
+in float v_d;
+in float v_visible;
+out vec4 outColor;
+void main(){
+    if (v_visible < 0.5) discard;
+    vec2 c = gl_PointCoord - 0.5;
+    float r2 = dot(c, c);
+    if (r2 > 0.25) discard;
+    float falloff = smoothstep(0.25, 0.05, r2);
+    outColor = vec4(v_col * (0.55 + 0.45*v_d), falloff);
+}`;
+
+function mkShader(t, src) {
+    const s = gl.createShader(t);
+    gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+        console.error(gl.getShaderInfoLog(s)); throw new Error('Shader compile error');
+    }
+    return s;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, mkShader(gl.VERTEX_SHADER, VS));
+gl.attachShader(prog, mkShader(gl.FRAGMENT_SHADER, FS));
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+    console.error(gl.getProgramInfoLog(prog)); throw new Error('Program link error');
+}
+
+const aPos = gl.getAttribLocation(prog, 'a_pos');
+const aCol = gl.getAttribLocation(prog, 'a_col');
+const aDepth = gl.getAttribLocation(prog, 'a_depth');
+const aNormal = gl.getAttribLocation(prog, 'a_normal');
+const uMvp = gl.getUniformLocation(prog, 'u_mvp');
+const uDepthScale = gl.getUniformLocation(prog, 'u_depthScale');
+const uPtSize = gl.getUniformLocation(prog, 'u_pointSize');
+const uColorMode = gl.getUniformLocation(prog, 'u_colorMode');
+const uBgCutoff = gl.getUniformLocation(prog, 'u_bgCutoff');
+
+const bufPos = gl.createBuffer(), bufCol = gl.createBuffer(),
+    bufDepth = gl.createBuffer(), bufNormal = gl.createBuffer();
+let cloudCount = 0;
+
+function uploadCloud(c) {
+    cloudCount = c.count;
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufPos);
+    gl.bufferData(gl.ARRAY_BUFFER, c.positions, gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufCol);
+    gl.bufferData(gl.ARRAY_BUFFER, c.colors, gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufDepth);
+    gl.bufferData(gl.ARRAY_BUFFER, c.depths, gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufNormal);
+    gl.bufferData(gl.ARRAY_BUFFER, c.normals, gl.DYNAMIC_DRAW);
+}
+
+// 4×4 matrix helpers
+function mat4Mul(a, b) {
+    const o = new Float32Array(16);
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) {
+        let s = 0;
+        for (let k = 0; k < 4; k++) s += a[r+k*4] * b[k+c*4];
+        o[r+c*4] = s;
+    }
+    return o;
+}
+function mat4Persp(fovY, aspect, n, f) {
+    const t = 1/Math.tan(fovY/2);
+    return new Float32Array([t/aspect,0,0,0, 0,t,0,0, 0,0,(f+n)/(n-f),-1, 0,0,2*f*n/(n-f),0]);
+}
+function mat4LookAt(ex,ey,ez, cx,cy,cz, ux,uy,uz) {
+    let fx=cx-ex, fy=cy-ey, fz=cz-ez;
+    let l = Math.hypot(fx,fy,fz)||1; fx/=l; fy/=l; fz/=l;
+    let rx=fy*uz-fz*uy, ry=fz*ux-fx*uz, rz=fx*uy-fy*ux;
+    l = Math.hypot(rx,ry,rz)||1; rx/=l; ry/=l; rz/=l;
+    const ax=ry*fz-rz*fy, ay=rz*fx-rx*fz, az=rx*fy-ry*fx;
+    return new Float32Array([
+        rx, ax, -fx, 0,
+        ry, ay, -fy, 0,
+        rz, az, -fz, 0,
+        -(rx*ex+ry*ey+rz*ez), -(ax*ex+ay*ey+az*ez), fx*ex+fy*ey+fz*ez, 1
+    ]);
+}
+
+const cam = { theta: Math.PI/2, phi: Math.PI/2, dist: 3.2, tx: 0, ty: 0, tz: -0.5 };
+let autoRotate = true;
+let wiggleMode = false;
+let wigBaseTheta = 0, wigBasePhi = 0;
+let colorMode = 0;       // 0 rgb, 1 depth, 2 normals
+let anaglyphMode = false;
+let bgCutoff = 0;
+let depthScale = 1.2, pointSize = 3;
+
+function camEye(offX = 0, offY = 0) {
+    let ex = cam.tx + cam.dist*Math.sin(cam.phi)*Math.cos(cam.theta);
+    let ey = cam.ty + cam.dist*Math.cos(cam.phi);
+    let ez = cam.tz + cam.dist*Math.sin(cam.phi)*Math.sin(cam.theta);
+    if (offX !== 0 || offY !== 0) {
+        const fx = cam.tx-ex, fy = cam.ty-ey, fz = cam.tz-ez;
+        const fl = Math.hypot(fx,fy,fz)||1;
+        const nfx = fx/fl, nfy = fy/fl, nfz = fz/fl;
+        let rx = nfy*0 - nfz*1, ry = nfz*0 - nfx*0, rz = nfx*1 - nfy*0;
+        rx = -nfz; ry = 0; rz = nfx;
+        const rl = Math.hypot(rx,ry,rz)||1; rx/=rl; ry/=rl; rz/=rl;
+        ex += rx*offX; ey += ry*offX; ez += rz*offX;
+    }
+    return [ex, ey, ez];
+}
+
+function glResize() {
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    glC.width = innerWidth * dpr; glC.height = innerHeight * dpr;
+    glC.style.width = innerWidth+'px'; glC.style.height = innerHeight+'px';
+    if (gl) gl.viewport(0, 0, glC.width, glC.height);
+}
+glResize(); addEventListener('resize', glResize);
+
+function drawPass(eyeOffX) {
+    const W = glC.width, H = glC.height;
+    const [ex,ey,ez] = camEye(eyeOffX);
+    const view = mat4LookAt(ex, ey, ez, cam.tx, cam.ty, cam.tz, 0, 1, 0);
+    const persp = mat4Persp(60*Math.PI/180, W/H, 0.05, 100);
+    const mvp = mat4Mul(persp, view);
+
+    gl.useProgram(prog);
+    gl.uniformMatrix4fv(uMvp, false, mvp);
+    gl.uniform1f(uDepthScale, depthScale);
+    gl.uniform1f(uPtSize, pointSize * (devicePixelRatio||1));
+    gl.uniform1f(uColorMode, colorMode);
+    gl.uniform1f(uBgCutoff, bgCutoff);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufPos);
+    gl.enableVertexAttribArray(aPos);
+    gl.vertexAttribPointer(aPos, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufCol);
+    gl.enableVertexAttribArray(aCol);
+    gl.vertexAttribPointer(aCol, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufDepth);
+    gl.enableVertexAttribArray(aDepth);
+    gl.vertexAttribPointer(aDepth, 1, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufNormal);
+    gl.enableVertexAttribArray(aNormal);
+    gl.vertexAttribPointer(aNormal, 3, gl.FLOAT, false, 0, 0);
+
+    gl.drawArrays(gl.POINTS, 0, cloudCount);
+}
+
+let rafId = null, _t0 = performance.now();
+function render() {
+    rafId = requestAnimationFrame(render);
+    if (!cloudCount) return;
+    const now = performance.now();
+    if (autoRotate) cam.theta += 0.0035;
+    if (wiggleMode) {
+        const t = (now - _t0) * 0.001;
+        cam.theta = wigBaseTheta + Math.sin(t * 1.4) * 0.18;
+        cam.phi = wigBasePhi + Math.cos(t * 1.0) * 0.08;
+    }
+
+    const W = glC.width, H = glC.height;
+    gl.viewport(0, 0, W, H);
+    gl.clearColor(0.012, 0.031, 0.063, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+    if (anaglyphMode) {
+        const ipd = 0.06;
+        gl.colorMask(true, false, false, true);
+        drawPass(-ipd);
+        gl.colorMask(false, true, true, true);
+        drawPass(+ipd);
+        gl.colorMask(true, true, true, true);
+    } else {
+        drawPass(0);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  CONTROLS
+// ─────────────────────────────────────────────────────────────
+let mouse = { down: false, btn: 0, lx: 0, ly: 0 };
+glC.addEventListener('mousedown', e => {
+    mouse.down = true; mouse.btn = e.button; mouse.lx = e.clientX; mouse.ly = e.clientY;
+    autoRotate = false; updateRotBtn();
+    if (wiggleMode) { wiggleMode = false; updateWigBtn(); }
+    e.preventDefault();
+});
+addEventListener('mouseup', () => mouse.down = false);
+addEventListener('mousemove', e => {
+    if (!mouse.down) return;
+    const dx = (e.clientX - mouse.lx)/innerWidth*3;
+    const dy = (e.clientY - mouse.ly)/innerHeight*3;
+    mouse.lx = e.clientX; mouse.ly = e.clientY;
+    if (mouse.btn === 0) {
+        cam.theta -= dx*1.6;
+        cam.phi = Math.max(0.05, Math.min(Math.PI - 0.05, cam.phi + dy*1.6));
+    } else {
+        cam.tx -= dx * cam.dist * 0.5;
+        cam.ty += dy * cam.dist * 0.5;
+    }
+});
+glC.addEventListener('wheel', e => {
+    cam.dist = Math.max(0.3, Math.min(20, cam.dist * Math.exp(e.deltaY*0.001)));
+    e.preventDefault();
+}, { passive: false });
+glC.addEventListener('contextmenu', e => e.preventDefault());
+
+let touches = {};
+glC.addEventListener('touchstart', e => {
+    e.preventDefault();
+    autoRotate = false; updateRotBtn();
+    if (wiggleMode) { wiggleMode = false; updateWigBtn(); }
+    for (const t of e.changedTouches) touches[t.identifier] = { x: t.clientX, y: t.clientY };
+}, { passive: false });
+glC.addEventListener('touchmove', e => {
+    e.preventDefault();
+    const ids = Object.keys(touches).filter(k => k!=='_pinch');
+    if (ids.length === 1) {
+        const t = e.changedTouches[0], prev = touches[t.identifier];
+        if (!prev) return;
+        const dx = (t.clientX - prev.x)/innerWidth*3;
+        const dy = (t.clientY - prev.y)/innerHeight*3;
+        cam.theta -= dx*1.6;
+        cam.phi = Math.max(0.05, Math.min(Math.PI-0.05, cam.phi + dy*1.6));
+        touches[t.identifier] = { x: t.clientX, y: t.clientY };
+    } else if (e.touches.length >= 2) {
+        const t1 = e.touches[0], t2 = e.touches[1];
+        const dist = Math.hypot(t1.clientX-t2.clientX, t1.clientY-t2.clientY);
+        if (touches._pinch) cam.dist = Math.max(0.3, Math.min(20, cam.dist * (touches._pinch / dist)));
+        touches._pinch = dist;
+    }
+}, { passive: false });
+glC.addEventListener('touchend', e => {
+    for (const t of e.changedTouches) delete touches[t.identifier];
+    if (e.touches.length < 2) delete touches._pinch;
+});
+
+$('depthSld').addEventListener('input', e => depthScale = parseFloat(e.target.value));
+$('sizeSld').addEventListener('input', e => pointSize = parseFloat(e.target.value));
+$('bgSld').addEventListener('input', e => bgCutoff = parseFloat(e.target.value));
+
+const updateRotBtn = () => $('rotBtn').classList.toggle('active', autoRotate);
+const updateWigBtn = () => $('wigBtn').classList.toggle('active', wiggleMode);
+
+$('rotBtn').addEventListener('click', () => {
+    autoRotate = !autoRotate; updateRotBtn();
+    if (autoRotate && wiggleMode) { wiggleMode = false; updateWigBtn(); }
+});
+$('wigBtn').addEventListener('click', () => {
+    wiggleMode = !wiggleMode; updateWigBtn();
+    if (wiggleMode) {
+        wigBaseTheta = cam.theta; wigBasePhi = cam.phi; _t0 = performance.now();
+        if (autoRotate) { autoRotate = false; updateRotBtn(); }
+    }
+});
+$('modeBtn').addEventListener('click', () => {
+    colorMode = (colorMode + 1) % 3;
+    $('modeBtn').classList.toggle('active', colorMode !== 0);
+    $('modeBtn').textContent = colorMode === 0 ? '◐ Farba' : (colorMode === 1 ? '◐ Hĺbka' : '◐ Normál');
+});
+$('anaBtn').addEventListener('click', () => {
+    anaglyphMode = !anaglyphMode;
+    $('anaBtn').classList.toggle('active', anaglyphMode);
+    if (anaglyphMode) showToast('Anaglyph 3D ON — nasaď červeno-modré okuliare', true);
+});
+
+// ─────────────────────────────────────────────────────────────
+//  WEBCAM LIVE MODE
+// ─────────────────────────────────────────────────────────────
+let liveStream = null, liveActive = false, liveVideo = null;
+
+$('webcamBtn').addEventListener('click', async () => {
+    try {
+        liveStream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+            audio: false
+        });
+    } catch (e) {
+        showToast('Webkamera odmietnutá: ' + e.message); return;
+    }
+    $('upload').style.display = 'none';
+    $('loading').classList.add('show');
+    try {
+        await ensureModel();
+    } catch (e) {
+        $('loading').classList.remove('show');
+        $('upload').style.display = 'flex';
+        liveStream.getTracks().forEach(t => t.stop());
+        showToast('Model sa nepodarilo načítať'); return;
+    }
+    $('ldStatus').textContent = 'Spúšťam live mód…';
+    setProg(100);
+    await new Promise(r => setTimeout(r, 200));
+    $('loading').classList.remove('show');
+
+    liveVideo = document.createElement('video');
+    liveVideo.srcObject = liveStream;
+    liveVideo.muted = true; liveVideo.playsInline = true;
+    await liveVideo.play();
+
+    // Show 3D viewer
+    $('gl').style.display = 'block';
+    $('newBtn').classList.add('show');
+    $('liveTag').classList.add('show');
+    $('hint').classList.add('show');
+    $('controls').classList.add('show');
+    $('depthMini').classList.add('show');
+    cam.theta = Math.PI/2; cam.phi = Math.PI/2; cam.dist = 3.2; cam.tx = 0; cam.ty = 0; cam.tz = -0.5;
+    autoRotate = false; updateRotBtn();
+    glResize();
+    if (rafId) cancelAnimationFrame(rafId);
+    render();
+
+    liveActive = true;
+    liveLoop();
+    showToast('Live · pohni sa pred kamerou', true);
+});
+
+async function liveLoop() {
+    while (liveActive) {
+        try {
+            const w = 320, h = Math.round(w * liveVideo.videoHeight / liveVideo.videoWidth);
+            const c = document.createElement('canvas');
+            c.width = w; c.height = h;
+            c.getContext('2d').drawImage(liveVideo, 0, 0, w, h);
+            const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.85));
+            const file = new File([blob], 'webcam.jpg', { type: 'image/jpeg' });
+
+            const url = URL.createObjectURL(file);
+            const result = await depthEstimator(url);
+            URL.revokeObjectURL(url);
+
+            const cloud = await buildCloud(file, result);
+            uploadCloud(cloud);
+            $('infoName').textContent = 'WEBCAM LIVE';
+            $('infoMeta').textContent = `${cloud.count.toLocaleString()} bodov · ${_device.toUpperCase()}`;
+            $('info').classList.add('show');
+        } catch (e) {
+            console.warn('Live frame failed:', e);
+            await new Promise(r => setTimeout(r, 200));
+        }
+    }
+}
+
+function stopLive() {
+    liveActive = false;
+    if (liveStream) { liveStream.getTracks().forEach(t => t.stop()); liveStream = null; }
+    if (liveVideo) { liveVideo.pause(); liveVideo = null; }
+    $('liveTag').classList.remove('show');
+}
+
+// ─────────────────────────────────────────────────────────────
+//  ORCHESTRATION
+// ─────────────────────────────────────────────────────────────
+async function processFile(file) {
+    if (!file.type.startsWith('image/')) {
+        showToast('Podporované sú len obrázky (JPG/PNG/WEBP).'); return;
+    }
+    stopLive();
+    $('upload').style.display = 'none';
+    $('loading').classList.add('show');
+    try {
+        await ensureModel();
+        const result = await estimateDepth(file);
+        $('ldStatus').textContent = 'Buduje 3D mračno…';
+        await new Promise(r => setTimeout(r, 30));
+        const cloud = await buildCloud(file, result);
+        uploadCloud(cloud);
+
+        cam.theta = Math.PI/2; cam.phi = Math.PI/2 + 0.1;
+        cam.dist = 3.2; cam.tx = 0; cam.ty = 0; cam.tz = -0.5;
+
+        $('loading').classList.remove('show');
+        $('gl').style.display = 'block';
+        $('newBtn').classList.add('show');
+        $('info').classList.add('show');
+        $('hint').classList.add('show');
+        $('controls').classList.add('show');
+        $('depthMini').classList.add('show');
+
+        $('infoName').textContent = file.name.replace(/\.[^.]+$/, '');
+        $('infoMeta').textContent = `Depth Anything V2 · ${cloud.count.toLocaleString()} bodov · ${_device.toUpperCase()}`;
+
+        autoRotate = true; updateRotBtn();
+        glResize();
+        if (rafId) cancelAnimationFrame(rafId);
+        render();
+        showToast('Hotovo. Pretiahni myšou, scrolluj pre zoom.', true);
+    } catch (e) {
+        console.error(e);
+        $('loading').classList.remove('show');
+        $('upload').style.display = 'flex';
+        showToast('Chyba: ' + (e.message || e));
+    }
+}
+
+function reset() {
+    stopLive();
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    cloudCount = 0;
+    $('gl').style.display = 'none';
+    $('newBtn').classList.remove('show');
+    $('info').classList.remove('show');
+    $('hint').classList.remove('show');
+    $('controls').classList.remove('show');
+    $('depthMini').classList.remove('show');
+    $('upload').style.display = 'flex';
+}
+
+function shot() {
+    if (!cloudCount) return;
+    const link = document.createElement('a');
+    link.download = 'parallax-' + Date.now() + '.png';
+    glC.toBlob(blob => {
+        link.href = URL.createObjectURL(blob);
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    }, 'image/png');
+}
+
+function exportPLY() {
+    if (!lastCloud) { showToast('Najprv načítaj fotku.'); return; }
+    const c = lastCloud;
+    const lines = [
+        'ply',
+        'format ascii 1.0',
+        'comment Generated by Parallax (B-MSAP) - Single-image AI depth',
+        `element vertex ${c.count}`,
+        'property float x', 'property float y', 'property float z',
+        'property uchar red', 'property uchar green', 'property uchar blue',
+        'end_header'
+    ];
+    for (let i = 0; i < c.count; i++) {
+        const x = c.positions[i*3];
+        const y = c.positions[i*3+1];
+        const z = -(1 - c.depths[i]) * depthScale;
+        const r = Math.round(c.colors[i*3]*255);
+        const g = Math.round(c.colors[i*3+1]*255);
+        const b = Math.round(c.colors[i*3+2]*255);
+        lines.push(`${x.toFixed(4)} ${y.toFixed(4)} ${z.toFixed(4)} ${r} ${g} ${b}`);
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `parallax-${Date.now()}.ply`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    showToast('.PLY exportované — môžeš to otvoriť v MeshLab / Blender.', true);
+}
+
+window.parallax = { reset, shot, exportPLY };
+updateRotBtn();
+</script>
+</body>
+</html>
