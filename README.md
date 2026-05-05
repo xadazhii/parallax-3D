@@ -1,8 +1,8 @@
-# Parallax — AI Depth from a Single Photo to 3D Space
+# Parallax — Multimedia → 3D Space
 
 > Semester project · **B-MSAP**, Part B (Vibecoding Web App)
 
-An interactive web app that turns a **single photograph** into a walkable 3D space. The **Depth Anything V2** neural network estimates a depth map directly in the browser, and the original pixels are rendered as a 3D point cloud through a custom WebGL2 engine.
+An interactive web app that turns **photos, audio, video, text, and PLY files** into walkable 3D point-cloud spaces. A single WebGL2 engine renders five different media pipelines: AI monocular depth (Depth Anything V2 via Transformers.js), custom radix-2 FFT spectrograms, video frame capture, text-to-shape, and direct PLY parsing.
 
 🌐 **Live demo:** [xadazhii.github.io/parallax-3D](https://xadazhii.github.io/parallax-3D/)
 
@@ -10,11 +10,19 @@ An interactive web app that turns a **single photograph** into a walkable 3D spa
 
 ## ✨ Features
 
-### Input
-- 📁 **Drag & drop** any photo (JPG / PNG / WEBP)
-- 📋 **Paste from clipboard** (Ctrl/Cmd + V)
-- 🖼 **4 sample images** (ocean, mountains, street, forest)
-- 🎥 **Live Webcam Mode** — real-time depth estimation from your camera
+### 5 input modes (one renderer)
+
+| Mode | Pipeline | Output |
+|---|---|---|
+| 📷 **Photo** | Depth Anything V2 (ONNX, ~50 MB) → bilateral smoothing → point cloud | RGB 3D scene |
+| 🎵 **Audio** | Decode → custom radix-2 FFT (window=512, hop≈220) → log-magnitude spectrogram | 3D height-map: X=time, Y=frequency, Z=amplitude |
+| 🎬 **Video** | `<video>` preview + scrub slider → grab frame to canvas → Photo pipeline | RGB 3D scene per frame |
+| 📝 **Text** | Render to canvas → pixel mask → points + shader sine/cosine wave | Animated 3D text |
+| 🧊 **.PLY** | ASCII parser → normalize bounds → direct upload to GPU | 3D point cloud (compatible with Part A Gaussian Splatting exports) |
+
+### Live capture
+- 🎥 **Live Webcam Mode** — real-time depth estimation from camera
+- 🎤 **Live Microphone Mode** — realtime FFT from mic, streaming spectrogram
 
 ### Visualization
 - 🎨 **3 color modes** — original RGB · depth gradient · surface normals
@@ -38,23 +46,24 @@ An interactive web app that turns a **single photograph** into a walkable 3D spa
 ## 🧠 How it works
 
 ```
-┌──────────────────────────────────────────────────────┐
-│  YOUR BROWSER (Chrome / Safari / Firefox)            │
-│                                                       │
-│  Photo  ──→  Depth Anything V2 (ONNX, ~50 MB)        │
-│                  │                                    │
-│                  ↓ WebGPU / WASM inference            │
-│                                                       │
-│              Depth map (Float32Array)                 │
-│                  │                                    │
-│                  ↓ + original RGB pixels              │
-│                                                       │
-│              3D point cloud (~220k points)            │
-│                  │                                    │
-│                  ↓ Custom WebGL2 renderer             │
-│                                                       │
-│              Interactive 3D scene                     │
-└──────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  YOUR BROWSER (Chrome / Safari / Firefox)                    │
+│                                                               │
+│   📷 Photo ──→  Depth Anything V2 (ONNX, WebGPU/WASM)        │
+│   🎵 Audio ──→  Custom FFT analyzer (Web Audio API)          │
+│   🎬 Video ──→  Frame capture → Depth Anything V2            │
+│   📝 Text  ──→  Canvas raster → pixel mask                   │
+│   🧊 .PLY  ──→  ASCII parser                                 │
+│                          │                                    │
+│                          ↓                                    │
+│                ┌─────────────────────┐                        │
+│                │ Unified cloud format│                        │
+│                │ {pos, col, depth, n}│                        │
+│                └─────────┬───────────┘                        │
+│                          ↓                                    │
+│                Custom WebGL2 point-cloud renderer             │
+│                  (orbital camera, anaglyph, wave shader)      │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 **No backend, no server.** Your photo never leaves the browser.
@@ -66,8 +75,12 @@ An interactive web app that turns a **single photograph** into a walkable 3D spa
 | Layer | Technology |
 |---|---|
 | **AI / ML** | [Transformers.js](https://github.com/huggingface/transformers.js) v3 + [Depth Anything V2](https://depth-anything-v2.github.io/) |
+| **Audio** | Web Audio API (`AudioContext`, `AnalyserNode`) + custom radix-2 FFT |
+| **Video** | `<video>` element + canvas frame grab |
+| **Text** | Canvas 2D rasterization → pixel mask |
+| **3D files** | ASCII PLY parser |
 | **GPU acceleration** | WebGPU (with WebAssembly SIMD fallback) |
-| **3D rendering** | Custom WebGL2 point-cloud engine (custom shaders) |
+| **3D rendering** | Custom WebGL2 point-cloud engine (custom shaders, anaglyph, wave) |
 | **Idle background** | Canvas 2D parallax starfield |
 | **Other** | Vanilla JS, no build step, single HTML file |
 
@@ -130,8 +143,8 @@ WebGPU makes inference ~5–10× faster than WASM, but the app works fine withou
 **Course:** B-MSAP (Multimedia Systems and Applications in Practice)
 **Part:** B — Vibecoding Web App
 **Author:** Kristína Adazhii
-**Medium:** Image → 3D
-**Topic:** AI 3D-space reconstruction from a single photograph using monocular depth estimation
+**Media covered:** Image · Audio · Video · Text · 3D — all five categories from the assignment brief
+**Topic:** Multimedia → 3D point-cloud reconstruction (AI depth estimation, FFT spectrogram, video frame capture, text rasterization, PLY import)
 
 ### Assignment requirements satisfied
 - ✅ 100 % client-side, no backend
