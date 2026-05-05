@@ -152,6 +152,24 @@ canvas{position:fixed;inset:0;width:100%;height:100%}
 #toast.show{display:block}
 #toast.ok{border-color:rgba(0,212,255,.4);background:rgba(3,20,30,.9);color:var(--cyan)}
 
+/* ── MODE TABS ── */
+.tabs{display:flex;gap:6px;margin:0 auto 18px;padding:4px;border:1px solid rgba(0,212,255,.18);
+    border-radius:30px;background:rgba(3,9,24,.5);width:fit-content}
+.tab{padding:7px 14px;border-radius:24px;font-size:10px;letter-spacing:1.5px;color:var(--muted);
+    cursor:pointer;transition:all .25s;text-transform:uppercase;white-space:nowrap;border:none;background:none}
+.tab:hover{color:var(--cyan)}
+.tab.active{background:linear-gradient(135deg,rgba(0,212,255,.18),rgba(26,106,255,.18));
+    color:var(--cyan);box-shadow:0 0 12px rgba(0,212,255,.18)}
+.mode-pane{display:none}
+.mode-pane.active{display:block}
+.text-input{width:100%;padding:14px 16px;background:rgba(3,9,24,.6);
+    border:1px solid rgba(0,212,255,.22);border-radius:10px;color:#fff;
+    font-family:inherit;font-size:18px;outline:none;transition:all .25s;letter-spacing:1px;text-align:center}
+.text-input:focus{border-color:rgba(0,212,255,.55);box-shadow:0 0 16px rgba(0,212,255,.18)}
+video.preview-vid{width:100%;max-height:200px;margin:8px 0;border-radius:10px;background:#000;display:none}
+video.preview-vid.show{display:block}
+.scrub{width:100%;margin:10px 0;accent-color:var(--cyan)}
+
 @media(max-width:600px){
     .hero-title{font-size:36px;letter-spacing:8px}
     .drop{padding:24px 18px}
@@ -161,6 +179,7 @@ canvas{position:fixed;inset:0;width:100%;height:100%}
     .icon-btn{padding:5px 8px;font-size:9px}
     #depthMini{width:90px;height:90px}
     #hint{font-size:9px}
+    .tab{padding:6px 10px;font-size:9px;letter-spacing:1px}
 }
 </style>
 </head>
@@ -177,36 +196,123 @@ canvas{position:fixed;inset:0;width:100%;height:100%}
 <div id="upload">
     <div class="hero">
         <div class="hero-title">Para<span>llax</span></div>
-        <div class="hero-sub">AI Hĺbka · Fotografia → 3D priestor</div>
+        <div class="hero-sub">Multimédiá → 3D priestor</div>
+    </div>
+    <div class="tabs">
+        <button class="tab active" data-mode="photo">📷 Foto</button>
+        <button class="tab" data-mode="audio">🎵 Audio</button>
+        <button class="tab" data-mode="video">🎬 Video</button>
+        <button class="tab" data-mode="text">📝 Text</button>
+        <button class="tab" data-mode="ply">🧊 .PLY</button>
     </div>
     <div class="drop" id="drop">
-        <div class="drop-icon">⬡</div>
-        <div class="drop-title">Nahraj fotku — vstúp do nej</div>
-        <div class="drop-desc">
-            Neurónová sieť <strong style="color:var(--cyan)">Depth Anything V2</strong> odhadne hĺbkovú mapu
-            z jediného obrázka. Z pixelov vznikne 3D mračno bodov, ktoré môžeš obísť kamerou.
+
+        <!-- PHOTO MODE -->
+        <div class="mode-pane active" data-pane="photo">
+            <div class="drop-icon">⬡</div>
+            <div class="drop-title">Foto → 3D priestor</div>
+            <div class="drop-desc">
+                Neurónová sieť <strong style="color:var(--cyan)">Depth Anything V2</strong> odhadne hĺbkovú mapu
+                z jediného obrázka. Z pixelov vznikne 3D mračno bodov.
+            </div>
+            <div class="fmt-badges">
+                <span class="fmt-badge">JPG · PNG · WEBP</span>
+                <span class="fmt-badge" id="devBadge">WEBGPU/WASM</span>
+            </div>
+            <div class="actions">
+                <button class="btn" onclick="document.getElementById('fileInput').click()">↑ Vybrať fotku</button>
+                <button class="btn alt" id="webcamBtn">⏺ Live Webcam</button>
+            </div>
+            <input type="file" id="fileInput" accept="image/*">
+            <div class="samples">
+                <span class="sample" data-url="https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=800">Oceán</span>
+                <span class="sample" data-url="https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800">Hory</span>
+                <span class="sample" data-url="https://images.unsplash.com/photo-1444723121867-7a241cacace9?w=800">Ulica</span>
+                <span class="sample" data-url="https://images.unsplash.com/photo-1517411032315-54ef2cb783bb?w=800">Les</span>
+            </div>
         </div>
-        <div class="fmt-badges">
-            <span class="fmt-badge">JPG · PNG · WEBP</span>
-            <span class="fmt-badge">100% V PREHLIADAČI</span>
-            <span class="fmt-badge" id="devBadge">WEBGPU/WASM</span>
+
+        <!-- AUDIO MODE -->
+        <div class="mode-pane" data-pane="audio">
+            <div class="drop-icon">♪</div>
+            <div class="drop-title">Audio → 3D spektrogram</div>
+            <div class="drop-desc">
+                Vlastný FFT analyzér rozloží audio na frekvenčné pásma v čase.
+                Z výsledku sa stane 3D krajina kde výška = hlasitosť, X = čas, Y = frekvencia.
+            </div>
+            <div class="fmt-badges">
+                <span class="fmt-badge">MP3 · WAV · OGG · FLAC</span>
+                <span class="fmt-badge">CUSTOM FFT</span>
+            </div>
+            <div class="actions">
+                <button class="btn" onclick="document.getElementById('audioInput').click()">↑ Vybrať audio</button>
+                <button class="btn alt" id="micBtn">⏺ Live Mikrofón</button>
+            </div>
+            <input type="file" id="audioInput" accept="audio/*">
         </div>
-        <div class="actions">
-            <button class="btn" onclick="document.getElementById('fileInput').click()">↑ &nbsp;Vybrať fotku</button>
-            <button class="btn alt" id="webcamBtn">⏺ &nbsp;Live Webcam</button>
+
+        <!-- VIDEO MODE -->
+        <div class="mode-pane" data-pane="video">
+            <div class="drop-icon">▶</div>
+            <div class="drop-title">Video → 3D scéna</div>
+            <div class="drop-desc">
+                Zachytíme snímok z videa a spustíme nad ním AI odhad hĺbky.
+                Posuvníkom prebehni časovou osou, ľubovoľný moment premeň na 3D.
+            </div>
+            <div class="fmt-badges">
+                <span class="fmt-badge">MP4 · WEBM · MOV</span>
+                <span class="fmt-badge">SCRUB & RENDER</span>
+            </div>
+            <video id="vidPreview" class="preview-vid" muted playsinline></video>
+            <input type="range" id="vidScrub" class="scrub" min="0" max="100" step="0.5" value="0" style="display:none">
+            <div class="actions">
+                <button class="btn" onclick="document.getElementById('videoInput').click()">↑ Vybrať video</button>
+                <button class="btn alt" id="vidProcessBtn" style="display:none">⚡ Spracovať snímok</button>
+            </div>
+            <input type="file" id="videoInput" accept="video/*">
         </div>
-        <input type="file" id="fileInput" accept="image/*">
-        <div class="samples">
-            <span class="sample" data-url="https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=800">Oceán</span>
-            <span class="sample" data-url="https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800">Hory</span>
-            <span class="sample" data-url="https://images.unsplash.com/photo-1444723121867-7a241cacace9?w=800">Ulica</span>
-            <span class="sample" data-url="https://images.unsplash.com/photo-1517411032315-54ef2cb783bb?w=800">Les</span>
+
+        <!-- TEXT MODE -->
+        <div class="mode-pane" data-pane="text">
+            <div class="drop-icon">𝄞</div>
+            <div class="drop-title">Text → 3D vlna</div>
+            <div class="drop-desc">
+                Napíš slovo alebo vetu — z písmen sa stane 3D pole bodov,
+                ktoré sa vlní v reálnom čase ako more.
+            </div>
+            <input type="text" id="textInput" class="text-input" placeholder="MSAP" maxlength="20" value="PARALLAX">
+            <div class="fmt-badges">
+                <span class="fmt-badge">SHADER WAVE</span>
+                <span class="fmt-badge">REALTIME</span>
+            </div>
+            <div class="actions">
+                <button class="btn" id="textGoBtn">⚡ Vytvoriť 3D text</button>
+            </div>
         </div>
+
+        <!-- PLY MODE -->
+        <div class="mode-pane" data-pane="ply">
+            <div class="drop-icon">⬢</div>
+            <div class="drop-title">.PLY mračno bodov</div>
+            <div class="drop-desc">
+                Načítaj <strong style="color:var(--cyan)">.ply</strong> súbor (napr. z 3D Gaussian Splatting tvojej Časti A).
+                Zobrazí sa rovnakým rendererom ako AI-generované scény.
+            </div>
+            <div class="fmt-badges">
+                <span class="fmt-badge">.PLY ASCII</span>
+                <span class="fmt-badge">DIRECT LOAD</span>
+            </div>
+            <div class="actions">
+                <button class="btn" onclick="document.getElementById('plyInput').click()">↑ Vybrať .PLY</button>
+            </div>
+            <input type="file" id="plyInput" accept=".ply">
+        </div>
+
     </div>
     <div class="feats">
-        <div class="feat"><div class="feat-dot"></div>Žiadny server, žiadne nahrávanie</div>
-        <div class="feat"><div class="feat-dot"></div>WebGPU akcelerácia</div>
-        <div class="feat"><div class="feat-dot"></div>Live Webcam · Anaglyph 3D · PLY export</div>
+        <div class="feat"><div class="feat-dot"></div>5 vstupov · 1 jednotný 3D engine</div>
+        <div class="feat"><div class="feat-dot"></div>Žiadny server</div>
+        <div class="feat"><div class="feat-dot"></div>WebGPU · WebGL2 · Web Audio API</div>
     </div>
 </div>
 
@@ -359,6 +465,39 @@ document.querySelectorAll('.sample').forEach(el => {
             showToast('Ukážku sa nepodarilo stiahnuť: ' + e.message);
         }
     });
+});
+
+// ─────────────────────────────────────────────────────────────
+//  MODE TABS
+// ─────────────────────────────────────────────────────────────
+let currentMode = 'photo';
+document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        currentMode = tab.dataset.mode;
+        document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === tab));
+        document.querySelectorAll('.mode-pane').forEach(p =>
+            p.classList.toggle('active', p.dataset.pane === currentMode));
+    });
+});
+
+// ─────────────────────────────────────────────────────────────
+//  MODE-SPECIFIC FILE INPUTS
+// ─────────────────────────────────────────────────────────────
+$('audioInput').addEventListener('change', e => {
+    if (e.target.files[0]) processAudio(e.target.files[0]);
+});
+$('videoInput').addEventListener('change', e => {
+    if (e.target.files[0]) loadVideoPreview(e.target.files[0]);
+});
+$('plyInput').addEventListener('change', e => {
+    if (e.target.files[0]) processPLY(e.target.files[0]);
+});
+$('textGoBtn').addEventListener('click', () => {
+    const text = $('textInput').value.trim();
+    if (text) processText(text);
+});
+$('textInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') $('textGoBtn').click();
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -572,6 +711,8 @@ uniform float u_depthScale;
 uniform float u_pointSize;
 uniform float u_colorMode;
 uniform float u_bgCutoff;
+uniform float u_time;
+uniform float u_wave;
 out vec3 v_col;
 out float v_d;
 out float v_visible;
@@ -584,6 +725,10 @@ void main(){
     }
     v_visible = 1.0;
     float z = -(1.0 - a_depth) * u_depthScale;
+    if (u_wave > 0.5) {
+        z += sin(a_pos.x * 4.0 + u_time * 2.0) * 0.18;
+        z += cos(a_pos.y * 3.5 + u_time * 1.4) * 0.12;
+    }
     vec4 p = u_mvp * vec4(a_pos.x, a_pos.y, z, 1.0);
     gl_Position = p;
     gl_PointSize = u_pointSize / max(0.4, p.w);
@@ -639,6 +784,8 @@ const uDepthScale = gl.getUniformLocation(prog, 'u_depthScale');
 const uPtSize = gl.getUniformLocation(prog, 'u_pointSize');
 const uColorMode = gl.getUniformLocation(prog, 'u_colorMode');
 const uBgCutoff = gl.getUniformLocation(prog, 'u_bgCutoff');
+const uTime = gl.getUniformLocation(prog, 'u_time');
+const uWave = gl.getUniformLocation(prog, 'u_wave');
 
 const bufPos = gl.createBuffer(), bufCol = gl.createBuffer(),
     bufDepth = gl.createBuffer(), bufNormal = gl.createBuffer();
@@ -691,6 +838,7 @@ let wigBaseTheta = 0, wigBasePhi = 0;
 let colorMode = 0;       // 0 rgb, 1 depth, 2 normals
 let anaglyphMode = false;
 let bgCutoff = 0;
+let waveAnim = false;
 let depthScale = 1.2, pointSize = 3;
 
 function camEye(offX = 0, offY = 0) {
@@ -730,6 +878,8 @@ function drawPass(eyeOffX) {
     gl.uniform1f(uPtSize, pointSize * (devicePixelRatio||1));
     gl.uniform1f(uColorMode, colorMode);
     gl.uniform1f(uBgCutoff, bgCutoff);
+    gl.uniform1f(uTime, (performance.now() - _t0) * 0.001);
+    gl.uniform1f(uWave, waveAnim ? 1 : 0);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, bufPos);
     gl.enableVertexAttribArray(aPos);
@@ -953,6 +1103,368 @@ function stopLive() {
 }
 
 // ─────────────────────────────────────────────────────────────
+//  AUDIO MODE — Custom radix-2 FFT → 3D spectrogram landscape
+// ─────────────────────────────────────────────────────────────
+function fft(re, im) {
+    const n = re.length;
+    for (let i = 1, j = 0; i < n; i++) {
+        let bit = n >> 1;
+        for (; j & bit; bit >>= 1) j ^= bit;
+        j ^= bit;
+        if (i < j) { const tr = re[i]; re[i] = re[j]; re[j] = tr;
+            const ti = im[i]; im[i] = im[j]; im[j] = ti; }
+    }
+    for (let len = 2; len <= n; len <<= 1) {
+        const half = len >> 1;
+        const ang = -2 * Math.PI / len;
+        const wRe = Math.cos(ang), wIm = Math.sin(ang);
+        for (let i = 0; i < n; i += len) {
+            let cRe = 1, cIm = 0;
+            for (let k = 0; k < half; k++) {
+                const a = i + k, b = a + half;
+                const tRe = cRe * re[b] - cIm * im[b];
+                const tIm = cRe * im[b] + cIm * re[b];
+                re[b] = re[a] - tRe; im[b] = im[a] - tIm;
+                re[a] += tRe; im[a] += tIm;
+                const nRe = cRe * wRe - cIm * wIm;
+                cIm = cRe * wIm + cIm * wRe;
+                cRe = nRe;
+            }
+        }
+    }
+}
+
+async function processAudio(file) {
+    $('upload').style.display = 'none';
+    $('loading').classList.add('show');
+    $('ldStatus').textContent = 'Dekódujem audio…';
+    $('ldNote').textContent = 'Cez vlastný FFT analyzér…';
+    setProg(10);
+    try {
+        const ab = await file.arrayBuffer();
+        const ac = new (window.AudioContext || window.webkitAudioContext)();
+        const buf = await ac.decodeAudioData(ab);
+        const ch = buf.getChannelData(0);
+        ac.close();
+
+        $('ldStatus').textContent = 'FFT analýza spektra…';
+        setProg(40);
+        await new Promise(r => setTimeout(r, 30));
+
+        const FFT_SIZE = 512;
+        const TIME_BINS = 220;
+        const FREQ_BINS = 96;          // keep low-mid bins (more musical)
+        const hop = Math.max(1, Math.floor((ch.length - FFT_SIZE) / TIME_BINS));
+        const re = new Float32Array(FFT_SIZE), im = new Float32Array(FFT_SIZE);
+        const spec = new Float32Array(TIME_BINS * FREQ_BINS);
+        let mx = 0;
+        for (let t = 0; t < TIME_BINS; t++) {
+            const off = t * hop;
+            for (let i = 0; i < FFT_SIZE; i++) {
+                const w = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (FFT_SIZE - 1));  // Hann
+                re[i] = (ch[off + i] || 0) * w;
+                im[i] = 0;
+            }
+            fft(re, im);
+            for (let f = 0; f < FREQ_BINS; f++) {
+                const m = Math.sqrt(re[f] * re[f] + im[f] * im[f]);
+                const v = Math.log10(1 + m * 30);
+                spec[t * FREQ_BINS + f] = v;
+                if (v > mx) mx = v;
+            }
+        }
+        if (mx > 0) for (let i = 0; i < spec.length; i++) spec[i] /= mx;
+
+        $('ldStatus').textContent = 'Buduje 3D spektrogram…';
+        setProg(85);
+
+        // Build cloud: x=time, y=freq (log scale), z=magnitude
+        const cnt = TIME_BINS * FREQ_BINS;
+        const positions = new Float32Array(cnt * 3);
+        const colors = new Float32Array(cnt * 3);
+        const depths = new Float32Array(cnt);
+        const normals = new Float32Array(cnt * 3);
+        const aspect = TIME_BINS / FREQ_BINS;
+        let idx = 0;
+        for (let t = 0; t < TIME_BINS; t++) {
+            for (let f = 0; f < FREQ_BINS; f++) {
+                const v = spec[t * FREQ_BINS + f];
+                const px = ((t / (TIME_BINS - 1)) - 0.5) * 2 * aspect;
+                const py = ((f / (FREQ_BINS - 1)) - 0.5) * 2;  // bass at bottom
+                positions[idx*3] = px; positions[idx*3+1] = py; positions[idx*3+2] = 0;
+                // Color by frequency — gradient blue→cyan→white
+                const t01 = f / FREQ_BINS;
+                colors[idx*3]   = 0.1 + v * 0.4 + t01 * 0.4;
+                colors[idx*3+1] = 0.4 + v * 0.6;
+                colors[idx*3+2] = 0.8 + v * 0.2;
+                depths[idx] = v;          // amplitude → "depth" (height)
+                normals[idx*3+2] = 1;
+                idx++;
+            }
+        }
+        const cloud = { positions, colors, depths, normals, count: cnt, aspect };
+        lastCloud = cloud;
+        uploadCloud(cloud);
+        showViewer(file.name.replace(/\.[^.]+$/, ''),
+            `Audio Spectrogram · ${TIME_BINS}×${FREQ_BINS} · custom FFT`);
+        showToast('Spektrogram pripravený. Krúť kamerou nad krajinou zvuku.', true);
+    } catch (e) {
+        console.error(e);
+        $('loading').classList.remove('show');
+        $('upload').style.display = 'flex';
+        showToast('Chyba audio: ' + e.message);
+    }
+}
+
+// Live mic spectrogram
+let micCtx = null, micAnalyser = null, micRaf = null;
+let _micSpec = null, _micFreq = 0, _micTime = 0;
+$('micBtn').addEventListener('click', async () => {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        micCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const src = micCtx.createMediaStreamSource(stream);
+        micAnalyser = micCtx.createAnalyser();
+        micAnalyser.fftSize = 256;
+        micAnalyser.smoothingTimeConstant = 0.6;
+        src.connect(micAnalyser);
+
+        const FREQ = 96, TIME = 220;
+        _micFreq = FREQ; _micTime = TIME;
+        _micSpec = new Float32Array(TIME * FREQ);
+        const cnt = TIME * FREQ;
+        const positions = new Float32Array(cnt * 3);
+        const colors = new Float32Array(cnt * 3);
+        const depths = new Float32Array(cnt);
+        const normals = new Float32Array(cnt * 3);
+        const aspect = TIME / FREQ;
+        let idx = 0;
+        for (let t = 0; t < TIME; t++) for (let f = 0; f < FREQ; f++) {
+            positions[idx*3] = ((t/(TIME-1))-0.5)*2*aspect;
+            positions[idx*3+1] = ((f/(FREQ-1))-0.5)*2;
+            const t01 = f/FREQ;
+            colors[idx*3] = 0.2 + t01*0.5;
+            colors[idx*3+1] = 0.5;
+            colors[idx*3+2] = 0.9;
+            normals[idx*3+2] = 1;
+            idx++;
+        }
+        const cloud = { positions, colors, depths, normals, count: cnt, aspect };
+        lastCloud = cloud;
+        uploadCloud(cloud);
+
+        showViewer('LIVE MIKROFÓN', 'Audio · realtime FFT');
+        $('liveTag').innerHTML = '<div class="live-dot"></div>Live · Mikrofón';
+        $('liveTag').classList.add('show');
+
+        const fb = new Uint8Array(micAnalyser.frequencyBinCount);
+        function tick() {
+            micRaf = requestAnimationFrame(tick);
+            micAnalyser.getByteFrequencyData(fb);
+            // Shift columns left by 1, add new at right
+            const F = _micFreq, T = _micTime;
+            for (let t = 0; t < T - 1; t++)
+                for (let f = 0; f < F; f++)
+                    _micSpec[t*F + f] = _micSpec[(t+1)*F + f];
+            const lastT = T - 1;
+            for (let f = 0; f < F; f++) {
+                const bin = Math.floor(f / F * fb.length);
+                _micSpec[lastT*F + f] = fb[bin] / 255;
+            }
+            // Update depths buffer
+            const dArr = new Float32Array(T*F);
+            for (let i = 0; i < T*F; i++) dArr[i] = _micSpec[i];
+            gl.bindBuffer(gl.ARRAY_BUFFER, bufDepth);
+            gl.bufferData(gl.ARRAY_BUFFER, dArr, gl.DYNAMIC_DRAW);
+        }
+        tick();
+        showToast('Hovor / hraj — krajina sa pohýbe v reálnom čase.', true);
+    } catch (e) {
+        showToast('Mikrofón odmietnutý: ' + e.message);
+    }
+});
+
+function stopMic() {
+    if (micRaf) { cancelAnimationFrame(micRaf); micRaf = null; }
+    if (micCtx) { micCtx.close(); micCtx = null; }
+    micAnalyser = null;
+}
+
+// ─────────────────────────────────────────────────────────────
+//  VIDEO MODE — drop video, scrub timeline, run depth on frame
+// ─────────────────────────────────────────────────────────────
+let _vidFile = null;
+
+function loadVideoPreview(file) {
+    _vidFile = file;
+    const url = URL.createObjectURL(file);
+    const v = $('vidPreview');
+    v.src = url;
+    v.classList.add('show');
+    v.onloadedmetadata = () => {
+        $('vidScrub').style.display = 'block';
+        $('vidProcessBtn').style.display = 'inline-block';
+        $('vidScrub').max = v.duration.toFixed(1);
+        v.currentTime = Math.min(0.5, v.duration * 0.1);
+    };
+    $('vidScrub').oninput = e => { v.currentTime = parseFloat(e.target.value); };
+}
+$('vidProcessBtn').addEventListener('click', async () => {
+    if (!_vidFile) return;
+    const v = $('vidPreview');
+    const cv = document.createElement('canvas');
+    cv.width = v.videoWidth; cv.height = v.videoHeight;
+    cv.getContext('2d').drawImage(v, 0, 0);
+    const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.92));
+    const f = new File([blob], _vidFile.name.replace(/\.[^.]+$/, '') + '_frame.jpg', { type: 'image/jpeg' });
+    processFile(f);
+});
+
+// ─────────────────────────────────────────────────────────────
+//  TEXT MODE — render text to canvas, points = pixels, animated wave
+// ─────────────────────────────────────────────────────────────
+function processText(text) {
+    const W = 480, H = 160;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 110px "Segoe UI", system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, W/2, H/2);
+    const data = ctx.getImageData(0, 0, W, H).data;
+
+    const pts = [];
+    const stride = 2;
+    for (let y = 0; y < H; y += stride) for (let x = 0; x < W; x += stride) {
+        const i = (y*W + x) * 4;
+        const lum = data[i];
+        if (lum > 50) pts.push([x, y, lum/255]);
+    }
+    if (!pts.length) { showToast('Text je prázdny.'); return; }
+
+    const cnt = pts.length;
+    const positions = new Float32Array(cnt * 3);
+    const colors = new Float32Array(cnt * 3);
+    const depths = new Float32Array(cnt);
+    const normals = new Float32Array(cnt * 3);
+    const aspect = W / H;
+    for (let i = 0; i < cnt; i++) {
+        const [x, y, l] = pts[i];
+        positions[i*3]   = ((x/W) - 0.5) * 2 * aspect;
+        positions[i*3+1] = -((y/H) - 0.5) * 2;
+        positions[i*3+2] = 0;
+        // Brand color gradient by x
+        const tx = x / W;
+        colors[i*3]   = 0.0 + tx * 0.3;
+        colors[i*3+1] = 0.6 + tx * 0.3;
+        colors[i*3+2] = 1.0;
+        depths[i] = 0.7 + Math.random() * 0.3;
+        normals[i*3+2] = 1;
+    }
+    const cloud = { positions, colors, depths, normals, count: cnt, aspect };
+    lastCloud = cloud;
+    uploadCloud(cloud);
+    showViewer(text, `Text · ${cnt.toLocaleString()} bodov · shader wave`);
+    waveAnim = true;
+    showToast('Text v 3D — body sa vlnia v shaderi.', true);
+}
+
+// ─────────────────────────────────────────────────────────────
+//  PLY MODE — load .ply ASCII point cloud
+// ─────────────────────────────────────────────────────────────
+async function processPLY(file) {
+    $('upload').style.display = 'none';
+    $('loading').classList.add('show');
+    $('ldStatus').textContent = 'Parsujem .PLY…';
+    setProg(20);
+    try {
+        const text = await file.text();
+        const lines = text.split('\n');
+        let n = 0, headerEnd = 0, hasColor = false;
+        const props = [];
+        for (let i = 0; i < lines.length; i++) {
+            const l = lines[i].trim();
+            if (l.startsWith('element vertex')) n = parseInt(l.split(' ')[2]);
+            if (l.startsWith('property')) props.push(l.split(' ').pop());
+            if (l === 'end_header') { headerEnd = i + 1; break; }
+        }
+        if (!n) throw new Error('Žiadne vertices v hlavičke');
+        hasColor = props.includes('red') || props.includes('r');
+        setProg(50);
+
+        const positions = new Float32Array(n * 3);
+        const colors = new Float32Array(n * 3);
+        const depths = new Float32Array(n);
+        const normals = new Float32Array(n * 3);
+
+        let xmn=Infinity, xmx=-Infinity, ymn=Infinity, ymx=-Infinity, zmn=Infinity, zmx=-Infinity;
+        const data = [];
+        for (let i = 0; i < n; i++) {
+            const parts = lines[headerEnd + i].trim().split(/\s+/).map(Number);
+            data.push(parts);
+            if (parts[0] < xmn) xmn = parts[0]; if (parts[0] > xmx) xmx = parts[0];
+            if (parts[1] < ymn) ymn = parts[1]; if (parts[1] > ymx) ymx = parts[1];
+            if (parts[2] < zmn) zmn = parts[2]; if (parts[2] > zmx) zmx = parts[2];
+        }
+        const cx = (xmn+xmx)/2, cy = (ymn+ymx)/2, cz = (zmn+zmx)/2;
+        const sc = 2 / Math.max(xmx-xmn, ymx-ymn, zmx-zmn || 1);
+        for (let i = 0; i < n; i++) {
+            const p = data[i];
+            positions[i*3]   = (p[0] - cx) * sc;
+            positions[i*3+1] = (p[1] - cy) * sc;
+            positions[i*3+2] = 0;
+            depths[i] = 0.5 + ((p[2] - cz) * sc) * 0.5;
+            if (hasColor) {
+                const ri = props.indexOf('red'), gi = props.indexOf('green'), bi = props.indexOf('blue');
+                colors[i*3]   = (p[ri] || 200)/255;
+                colors[i*3+1] = (p[gi] || 200)/255;
+                colors[i*3+2] = (p[bi] || 255)/255;
+            } else {
+                colors[i*3] = 0.4; colors[i*3+1] = 0.85; colors[i*3+2] = 1.0;
+            }
+            normals[i*3+2] = 1;
+        }
+        setProg(95);
+
+        const cloud = { positions, colors, depths, normals, count: n, aspect: 1 };
+        lastCloud = cloud;
+        uploadCloud(cloud);
+        showViewer(file.name.replace(/\.[^.]+$/, ''), `.PLY · ${n.toLocaleString()} bodov`);
+        showToast('PLY načítané — rovnaký renderer ako AI scény.', true);
+    } catch (e) {
+        console.error(e);
+        $('loading').classList.remove('show');
+        $('upload').style.display = 'flex';
+        showToast('PLY chyba: ' + e.message);
+    }
+}
+
+// Common viewer setup
+function showViewer(name, meta) {
+    cam.theta = Math.PI/2; cam.phi = Math.PI/2 + 0.1;
+    cam.dist = 3.2; cam.tx = 0; cam.ty = 0; cam.tz = 0;
+    _t0 = performance.now();
+    waveAnim = false;
+    $('upload').style.display = 'none';
+    $('loading').classList.remove('show');
+    $('gl').style.display = 'block';
+    $('newBtn').classList.add('show');
+    $('info').classList.add('show');
+    $('hint').classList.add('show');
+    $('controls').classList.add('show');
+    $('depthMini').classList.remove('show');
+    $('infoName').textContent = name;
+    $('infoMeta').textContent = meta;
+    autoRotate = true; updateRotBtn();
+    glResize();
+    if (rafId) cancelAnimationFrame(rafId);
+    render();
+}
+
+// ─────────────────────────────────────────────────────────────
 //  ORCHESTRATION
 // ─────────────────────────────────────────────────────────────
 async function processFile(file) {
@@ -999,14 +1511,18 @@ async function processFile(file) {
 
 function reset() {
     stopLive();
+    stopMic();
     if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
     cloudCount = 0;
+    waveAnim = false;
     $('gl').style.display = 'none';
     $('newBtn').classList.remove('show');
     $('info').classList.remove('show');
     $('hint').classList.remove('show');
     $('controls').classList.remove('show');
     $('depthMini').classList.remove('show');
+    $('liveTag').classList.remove('show');
+    $('liveTag').innerHTML = '<div class="live-dot"></div>Live · Webcam';
     $('upload').style.display = 'flex';
 }
 
