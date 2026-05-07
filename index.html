@@ -940,6 +940,12 @@ function drawPass(eyeOffX) {
 let rafId = null, _t0 = performance.now();
 function render() {
     rafId = requestAnimationFrame(render);
+    // Always clear, even before any cloud is uploaded — otherwise the canvas
+    // shows the browser default (white) until first frame is drawn.
+    const W = glC.width, H = glC.height;
+    gl.viewport(0, 0, W, H);
+    gl.clearColor(0.012, 0.031, 0.063, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
     if (!cloudCount) return;
     const now = performance.now();
     if (autoRotate) cam.theta += 0.0035;
@@ -949,10 +955,6 @@ function render() {
         cam.phi = wigBasePhi + Math.cos(t * 1.0) * 0.08;
     }
 
-    const W = glC.width, H = glC.height;
-    gl.viewport(0, 0, W, H);
-    gl.clearColor(0.012, 0.031, 0.063, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
@@ -1457,11 +1459,16 @@ function loadVideoPreview(file) {
 $('vidProcessBtn').addEventListener('click', async () => {
     if (!_vidFile) return;
     const v = $('vidPreview');
+    if (!v.videoWidth || !v.videoHeight) {
+        showToast('Video sa ešte nenačítalo, počkaj sekundu.'); return;
+    }
     const cv = document.createElement('canvas');
     cv.width = v.videoWidth; cv.height = v.videoHeight;
     cv.getContext('2d').drawImage(v, 0, 0);
     const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.92));
+    if (!blob) { showToast('Nepodarilo sa získať snímok z videa.'); return; }
     const f = new File([blob], _vidFile.name.replace(/\.[^.]+$/, '') + '_frame.jpg', { type: 'image/jpeg' });
+    v.pause();
     processFile(f);
 });
 
