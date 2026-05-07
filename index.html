@@ -833,7 +833,19 @@ const bufPos = gl.createBuffer(), bufCol = gl.createBuffer(),
     bufDepth = gl.createBuffer(), bufNormal = gl.createBuffer();
 let cloudCount = 0;
 
+// Temporal interpolation state for video playback
+let _lerpFromDep = null, _lerpToDep = null;
+let _lerpFromCol = null, _lerpToCol = null;
+let _lerpScratchDep = null, _lerpScratchCol = null;
+let _lerpStart = 0, _lerpDur = 280, _lerpActive = false;
+function clearLerp() {
+    _lerpFromDep = _lerpToDep = _lerpFromCol = _lerpToCol = null;
+    _lerpScratchDep = _lerpScratchCol = null;
+    _lerpActive = false;
+}
+
 function uploadCloud(c) {
+    clearLerp();
     cloudCount = c.count;
     gl.bindBuffer(gl.ARRAY_BUFFER, bufPos);
     gl.bufferData(gl.ARRAY_BUFFER, c.positions, gl.DYNAMIC_DRAW);
@@ -843,6 +855,48 @@ function uploadCloud(c) {
     gl.bufferData(gl.ARRAY_BUFFER, c.depths, gl.DYNAMIC_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER, bufNormal);
     gl.bufferData(gl.ARRAY_BUFFER, c.normals, gl.DYNAMIC_DRAW);
+}
+
+// Same as uploadCloud, but instead of replacing depths/colors immediately,
+// queue them as the new lerp target. Render() interpolates from the last
+// displayed depths/colors over _lerpDur ms, producing continuous motion.
+function uploadCloudVideo(c) {
+    cloudCount = c.count;
+    // Positions and normals don't change between video frames — upload once
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufPos);
+    gl.bufferData(gl.ARRAY_BUFFER, c.positions, gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufNormal);
+    gl.bufferData(gl.ARRAY_BUFFER, c.normals, gl.DYNAMIC_DRAW);
+
+    const n = c.depths.length, n3 = c.colors.length;
+
+    // First call (or size change) — jump straight to the new state, no lerp
+    if (!_lerpScratchDep || _lerpScratchDep.length !== n) {
+        _lerpFromDep = new Float32Array(n);
+        _lerpToDep   = new Float32Array(n);
+        _lerpFromCol = new Float32Array(n3);
+        _lerpToCol   = new Float32Array(n3);
+        _lerpScratchDep = new Float32Array(n);
+        _lerpScratchCol = new Float32Array(n3);
+        _lerpScratchDep.set(c.depths);
+        _lerpScratchCol.set(c.colors);
+        _lerpFromDep.set(c.depths); _lerpToDep.set(c.depths);
+        _lerpFromCol.set(c.colors); _lerpToCol.set(c.colors);
+        gl.bindBuffer(gl.ARRAY_BUFFER, bufDepth);
+        gl.bufferData(gl.ARRAY_BUFFER, c.depths, gl.DYNAMIC_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER, bufCol);
+        gl.bufferData(gl.ARRAY_BUFFER, c.colors, gl.DYNAMIC_DRAW);
+        _lerpActive = false;
+        return;
+    }
+
+    // Snapshot whatever is currently displayed as the new "from"
+    _lerpFromDep.set(_lerpScratchDep);
+    _lerpFromCol.set(_lerpScratchCol);
+    _lerpToDep.set(c.depths);
+    _lerpToCol.set(c.colors);
+    _lerpStart = performance.now();
+    _lerpActive = true;
 }
 
 // 4×4 matrix helpers
@@ -949,6 +1003,26 @@ function render() {
     gl.clearColor(0.012, 0.031, 0.063, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
     if (!cloudCount) return;
+
+    // Temporal interpolation between consecutive video frames (CPU lerp).
+    // The depth model produces ~3-5 fps; this morphs depths/colors at 60 fps.
+    if (_lerpActive && _lerpFromDep) {
+        const raw = (performance.now() - _lerpStart) / _lerpDur;
+        const t = raw >= 1 ? 1 : raw;
+        // Smoothstep easing for organic feel
+        const e = t * t * (3 - 2 * t);
+        const oneMinus = 1 - e;
+        const sd = _lerpScratchDep, sc = _lerpScratchCol;
+        const fd = _lerpFromDep, td = _lerpToDep;
+        const fc = _lerpFromCol, tc = _lerpToCol;
+        for (let i = 0, n = sd.length; i < n; i++) sd[i] = fd[i] * oneMinus + td[i] * e;
+        for (let i = 0, n = sc.length; i < n; i++) sc[i] = fc[i] * oneMinus + tc[i] * e;
+        gl.bindBuffer(gl.ARRAY_BUFFER, bufDepth);
+        gl.bufferData(gl.ARRAY_BUFFER, sd, gl.DYNAMIC_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER, bufCol);
+        gl.bufferData(gl.ARRAY_BUFFER, sc, gl.DYNAMIC_DRAW);
+        if (t >= 1) _lerpActive = false;
+    }
     const now = performance.now();
     if (autoRotate) cam.theta += 0.0035;
     if (wiggleMode) {
@@ -1557,7 +1631,7 @@ $('vidAnimBtn').addEventListener('click', async () => {
             const f = await grabVideoFrame(v, 0.78);
             const result = await estimateDepth(f);
             const cloud = await buildCloud(f, result);
-            uploadCloud(cloud);
+            uploadCloudVideo(cloud);
             $('infoMeta').textContent =
                 `3D Video · t=${v.currentTime.toFixed(1)}s / ${v.duration.toFixed(1)}s · ${cloud.count.toLocaleString()} bodov · ${_device.toUpperCase()}`;
         } catch (e) {
