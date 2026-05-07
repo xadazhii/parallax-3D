@@ -1494,24 +1494,28 @@ $('vidAnimBtn').addEventListener('click', async () => {
     }
 
     // First frame: full processFile path so the viewer is set up properly
+    const origName = _vidFile.name.replace(/\.[^.]+$/, '');
     try {
         const firstFrame = await grabVideoFrame(v, 0.85);
         await processFile(firstFrame);
+        $('infoName').textContent = origName; // override "frame" with real video name
     } catch (e) {
         showToast('Chyba prvého snímku: ' + e.message); return;
     }
 
-    // Now play video (with audio) and stream subsequent frames into the cloud
+    // Loop video so the scene keeps evolving until user resets
+    v.loop = true;
+    v.currentTime = 0;
     _vidPlaying = true;
     v.muted = false;
     v.playbackRate = 0.5;     // slow enough for depth model to keep up
     try { await v.play(); } catch (e) { /* autoplay blocked is fine — user clicked */ }
 
-    $('liveTag').innerHTML = '<div class="live-dot"></div>3D · Video';
+    $('liveTag').innerHTML = '<div class="live-dot"></div>3D · Video · LOOP';
     $('liveTag').classList.add('show');
-    showToast('3D video sa prehráva (0.5×) — sleduj scénu, ktorá sa hýbe v čase.', true);
+    showToast('3D video sa prehráva v slučke (0.5×). Stop = „Nová scéna".', true);
 
-    while (_vidPlaying && !v.ended) {
+    while (_vidPlaying) {
         if (!_vidProcessing && !v.paused) {
             _vidProcessing = true;
             try {
@@ -1520,7 +1524,7 @@ $('vidAnimBtn').addEventListener('click', async () => {
                 const cloud = await buildCloud(f, result);
                 uploadCloud(cloud);
                 $('infoMeta').textContent =
-                    `3D Video · t=${v.currentTime.toFixed(1)}s · ${cloud.count.toLocaleString()} bodov · ${_device.toUpperCase()}`;
+                    `3D Video · t=${v.currentTime.toFixed(1)}s / ${v.duration.toFixed(1)}s · ${cloud.count.toLocaleString()} bodov · ${_device.toUpperCase()}`;
             } catch (e) {
                 console.warn('Frame skipped:', e);
             }
@@ -1529,12 +1533,8 @@ $('vidAnimBtn').addEventListener('click', async () => {
         await new Promise(r => requestAnimationFrame(r));
     }
 
-    if (v.ended) {
-        showToast('Video skončilo. Klikni „Nová fotka" pre reštart.', true);
-        $('infoMeta').textContent = $('infoMeta').textContent.replace(/^3D Video[^·]*·\s*/, '3D Video · END · ');
-    }
-    _vidPlaying = false;
     v.muted = true;
+    v.loop = false;
 });
 
 function stopVideoAnim() {
