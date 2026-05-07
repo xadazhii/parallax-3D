@@ -110,6 +110,24 @@ canvas{position:fixed;inset:0;width:100%;height:100%}
 #hint.show{display:block}
 #hint strong{color:var(--cyan);font-weight:400}
 
+#audioHud{position:fixed;top:78px;left:22px;z-index:999;display:none;min-width:200px;
+    padding:14px 16px;border:1px solid rgba(0,212,255,.18);border-radius:12px;
+    backdrop-filter:blur(20px);background:rgba(3,8,22,.82)}
+#audioHud.show{display:block}
+.aH-row{display:flex;justify-content:space-between;align-items:baseline;gap:14px;margin-bottom:10px}
+.aH-row:last-child{margin-bottom:0}
+.aH-lbl{font-size:9px;letter-spacing:2px;color:var(--muted);text-transform:uppercase}
+.aH-val{font-size:15px;color:var(--cyan);font-variant-numeric:tabular-nums;letter-spacing:.5px}
+.aH-sub{font-size:9px;color:var(--muted);margin-left:6px;letter-spacing:1px}
+.aH-bar{height:4px;background:rgba(0,212,255,.1);border-radius:2px;overflow:hidden;margin-top:4px}
+.aH-bar-fill{height:100%;background:linear-gradient(90deg,#00d4ff 0%,#ff5577 100%);
+    width:0%;transition:width .08s linear}
+.aH-beat{display:inline-block;width:10px;height:10px;border-radius:50%;
+    background:rgba(255,80,120,.2);border:1px solid rgba(255,80,120,.4);
+    transition:all .05s ease-out;vertical-align:middle;margin-left:8px}
+.aH-beat.hit{background:#ff5577;box-shadow:0 0 18px #ff5577,0 0 6px #ff5577;
+    border-color:#ff5577;transform:scale(1.6)}
+
 #controls{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:999;
     display:none;gap:14px;padding:10px 18px;border:1px solid rgba(0,212,255,.18);
     border-radius:30px;backdrop-filter:blur(20px);background:rgba(3,8,22,.78);
@@ -333,6 +351,28 @@ video.preview-vid.show{display:block}
     <strong>🖱 Ľavé</strong> Rotácia<br>
     <strong>🖱 Pravé</strong> Posun<br>
     <strong>🎡 Scroll</strong> Zoom
+</div>
+
+<div id="audioHud">
+    <div class="aH-row">
+        <div class="aH-lbl">Nota</div>
+        <div class="aH-val" id="aHnote">—</div>
+    </div>
+    <div class="aH-row">
+        <div class="aH-lbl">Frekvencia</div>
+        <div class="aH-val" id="aHhz">— <span class="aH-sub">Hz</span></div>
+    </div>
+    <div class="aH-row" style="display:block">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <div class="aH-lbl">Hlasitosť</div>
+            <div class="aH-val" id="aHdb">−∞ <span class="aH-sub">dB</span></div>
+        </div>
+        <div class="aH-bar"><div class="aH-bar-fill" id="aHbar"></div></div>
+    </div>
+    <div class="aH-row">
+        <div class="aH-lbl">Beat <span class="aH-beat" id="aHbeat"></span></div>
+        <div class="aH-val" id="aHbpm">— <span class="aH-sub">BPM</span></div>
+    </div>
 </div>
 
 <div id="controls">
@@ -1233,7 +1273,7 @@ $('micBtn').addEventListener('click', async () => {
         micCtx = new (window.AudioContext || window.webkitAudioContext)();
         const src = micCtx.createMediaStreamSource(stream);
         micAnalyser = micCtx.createAnalyser();
-        micAnalyser.fftSize = 256;
+        micAnalyser.fftSize = 2048;
         micAnalyser.smoothingTimeConstant = 0.6;
         src.connect(micAnalyser);
 
@@ -1264,8 +1304,21 @@ $('micBtn').addEventListener('click', async () => {
         showViewer('LIVE MIKROFÓN', 'Audio · realtime FFT');
         $('liveTag').innerHTML = '<div class="live-dot"></div>Live · Mikrofón';
         $('liveTag').classList.add('show');
+        $('audioHud').classList.add('show');
 
         const fb = new Uint8Array(micAnalyser.frequencyBinCount);
+        const dArr = new Float32Array(TIME * FREQ);
+        const cArr = new Float32Array(TIME * FREQ * 3);
+
+        // Audio analytics state
+        const sampleRate = micCtx.sampleRate;
+        const binHz = sampleRate / micAnalyser.fftSize;
+        const noteNames = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+        const energyHist = new Float32Array(43); // ~0.7s @ 60fps
+        let energyIdx = 0;
+        let lastBeatT = 0, beatPulse = 0;
+        const beatTimes = []; // timestamps for BPM calc
+
         function tick() {
             micRaf = requestAnimationFrame(tick);
             micAnalyser.getByteFrequencyData(fb);
@@ -1276,17 +1329,99 @@ $('micBtn').addEventListener('click', async () => {
                     _micSpec[t*F + f] = _micSpec[(t+1)*F + f];
             const lastT = T - 1;
             for (let f = 0; f < F; f++) {
-                const bin = Math.floor(f / F * fb.length);
+                // Log-scale frequency mapping so vocal range fills more of the Y axis
+                const bin = Math.min(fb.length - 1,
+                    Math.floor(Math.pow(f / (F - 1), 1.6) * fb.length));
                 _micSpec[lastT*F + f] = fb[bin] / 255;
             }
-            // Update depths buffer
-            const dArr = new Float32Array(T*F);
-            for (let i = 0; i < T*F; i++) dArr[i] = _micSpec[i];
+
+            // ── Pitch detection: peak bin in 80–2000 Hz with parabolic interpolation
+            const minBin = Math.max(1, Math.floor(80 / binHz));
+            const maxBin = Math.min(fb.length - 2, Math.floor(2000 / binHz));
+            let peakBin = minBin, peakVal = 0;
+            for (let b = minBin; b <= maxBin; b++) {
+                if (fb[b] > peakVal) { peakVal = fb[b]; peakBin = b; }
+            }
+            let noteText = '—', hzText = '—';
+            if (peakVal > 80) {
+                const v0 = fb[peakBin - 1], v1 = fb[peakBin], v2 = fb[peakBin + 1];
+                const denom = (v0 - 2*v1 + v2);
+                const delta = denom !== 0 ? 0.5 * (v0 - v2) / denom : 0;
+                const pitchHz = (peakBin + delta) * binHz;
+                const midi = 12 * Math.log2(pitchHz / 440) + 69;
+                const midiR = Math.round(midi);
+                if (midiR >= 12 && midiR <= 108) {
+                    const cents = Math.round((midi - midiR) * 100);
+                    noteText = noteNames[((midiR % 12) + 12) % 12] + (Math.floor(midiR / 12) - 1)
+                        + ' ' + (cents > 0 ? '+' : '') + cents + '¢';
+                    hzText = pitchHz.toFixed(1);
+                }
+            }
+
+            // ── RMS-style loudness from spectrum (0..1, then to dB)
+            let energy = 0;
+            for (let b = 0; b < fb.length; b++) energy += fb[b] * fb[b];
+            energy = Math.sqrt(energy / fb.length) / 255;
+            const dbVal = energy > 0.001 ? Math.round(20 * Math.log10(energy)) : -60;
+
+            // ── Beat detection: bass band (sub-200 Hz) energy spike vs rolling average
+            const bassMax = Math.min(fb.length, Math.ceil(200 / binHz));
+            let bass = 0;
+            for (let b = 1; b < bassMax; b++) bass += fb[b];
+            bass /= (bassMax - 1) * 255;
+            let avgBass = 0;
+            for (let i = 0; i < energyHist.length; i++) avgBass += energyHist[i];
+            avgBass /= energyHist.length;
+            const now = performance.now();
+            if (bass > avgBass * 1.45 && bass > 0.18 && now - lastBeatT > 250) {
+                lastBeatT = now;
+                beatPulse = 1;
+                beatTimes.push(now);
+                while (beatTimes.length > 8) beatTimes.shift();
+            }
+            energyHist[energyIdx] = bass;
+            energyIdx = (energyIdx + 1) % energyHist.length;
+            beatPulse = Math.max(0, beatPulse - 0.06);
+
+            // BPM from intervals between recent beats
+            let bpmText = '—';
+            if (beatTimes.length >= 3 && now - lastBeatT < 2500) {
+                const intervals = [];
+                for (let i = 1; i < beatTimes.length; i++)
+                    intervals.push(beatTimes[i] - beatTimes[i-1]);
+                intervals.sort((a,b) => a-b);
+                const median = intervals[intervals.length >> 1];
+                const bpm = Math.round(60000 / median);
+                if (bpm >= 40 && bpm <= 220) bpmText = String(bpm);
+            }
+
+            // ── Update HUD
+            $('aHnote').textContent = noteText;
+            $('aHhz').innerHTML = hzText + ' <span class="aH-sub">Hz</span>';
+            $('aHdb').innerHTML = (dbVal <= -60 ? '−∞' : dbVal) + ' <span class="aH-sub">dB</span>';
+            $('aHbar').style.width = Math.min(100, Math.max(0, (dbVal + 60) / 60 * 100)) + '%';
+            $('aHbpm').innerHTML = bpmText + ' <span class="aH-sub">BPM</span>';
+            const beatEl = $('aHbeat');
+            if (beatPulse > 0.3) beatEl.classList.add('hit');
+            else beatEl.classList.remove('hit');
+
+            // ── Update depths + colors with beat pulse boost
+            const flash = beatPulse * 0.5;
+            for (let i = 0; i < T*F; i++) {
+                const v = _micSpec[i];
+                dArr[i] = v * (1 + beatPulse * 0.4);
+                // Heatmap: blue → cyan → white as v goes 0 → 1, plus beat flash
+                cArr[i*3]     = Math.min(1, 0.05 + v * 0.95 + flash);
+                cArr[i*3 + 1] = Math.min(1, 0.40 + v * 0.60 + flash * 0.6);
+                cArr[i*3 + 2] = Math.min(1, 0.85 + v * 0.15 + flash * 0.2);
+            }
             gl.bindBuffer(gl.ARRAY_BUFFER, bufDepth);
             gl.bufferData(gl.ARRAY_BUFFER, dArr, gl.DYNAMIC_DRAW);
+            gl.bindBuffer(gl.ARRAY_BUFFER, bufCol);
+            gl.bufferData(gl.ARRAY_BUFFER, cArr, gl.DYNAMIC_DRAW);
         }
         tick();
-        showToast('Hovor / hraj — krajina sa pohýbe v reálnom čase.', true);
+        showToast('Hovor / spievaj / pusti hudbu — sleduj notu, hlasitosť a beat.', true);
     } catch (e) {
         showToast('Mikrofón odmietnutý: ' + e.message);
     }
@@ -1296,6 +1431,8 @@ function stopMic() {
     if (micRaf) { cancelAnimationFrame(micRaf); micRaf = null; }
     if (micCtx) { micCtx.close(); micCtx = null; }
     micAnalyser = null;
+    $('audioHud').classList.remove('show');
+    $('aHbeat').classList.remove('hit');
 }
 
 // ─────────────────────────────────────────────────────────────
