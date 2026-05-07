@@ -136,7 +136,7 @@ canvas{position:fixed;inset:0;width:100%;height:100%}
 #depthMini::after{content:'HĹBKA';position:absolute;top:6px;left:8px;font-size:9px;
     letter-spacing:2px;color:var(--cyan);text-shadow:0 0 4px rgba(3,8,16,.9);pointer-events:none}
 
-#liveTag{position:fixed;top:22px;left:50%;transform:translateX(-50%);z-index:1000;
+#liveTag{position:fixed;top:68px;left:50%;transform:translateX(-50%);z-index:1000;
     display:none;align-items:center;gap:8px;padding:6px 14px;border-radius:20px;
     background:rgba(255,40,80,.18);border:1px solid rgba(255,80,120,.5);
     color:#ff7799;font-size:10px;letter-spacing:2px;text-transform:uppercase}
@@ -299,8 +299,8 @@ video.preview-vid.show{display:block}
                 Zobrazí sa rovnakým rendererom ako AI-generované scény.
             </div>
             <div class="fmt-badges">
-                <span class="fmt-badge">.PLY ASCII</span>
-                <span class="fmt-badge">DIRECT LOAD</span>
+                <span class="fmt-badge">ASCII + BINARY</span>
+                <span class="fmt-badge">GAUSSIAN SPLATTING</span>
             </div>
             <div class="actions">
                 <button class="btn" onclick="document.getElementById('plyInput').click()">↑ Vybrať .PLY</button>
@@ -1023,6 +1023,10 @@ $('anaBtn').addEventListener('click', () => {
 let liveStream = null, liveActive = false, liveVideo = null;
 
 $('webcamBtn').addEventListener('click', async () => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showToast('Webkamera nedostupná: otvor stránku cez http://localhost alebo https:// (nie file://).');
+        return;
+    }
     try {
         liveStream = await navigator.mediaDevices.getUserMedia({
             video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
@@ -1220,6 +1224,10 @@ async function processAudio(file) {
 let micCtx = null, micAnalyser = null, micRaf = null;
 let _micSpec = null, _micFreq = 0, _micTime = 0;
 $('micBtn').addEventListener('click', async () => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showToast('Mikrofón nedostupný: otvor stránku cez http://localhost alebo https:// (nie file://).');
+        return;
+    }
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
         micCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1379,21 +1387,114 @@ async function processPLY(file) {
     $('upload').style.display = 'none';
     $('loading').classList.add('show');
     $('ldStatus').textContent = 'Parsujem .PLY…';
-    setProg(20);
+    setProg(15);
     try {
-        const text = await file.text();
-        const lines = text.split('\n');
-        let n = 0, headerEnd = 0, hasColor = false;
-        const props = [];
-        for (let i = 0; i < lines.length; i++) {
-            const l = lines[i].trim();
-            if (l.startsWith('element vertex')) n = parseInt(l.split(' ')[2]);
-            if (l.startsWith('property')) props.push(l.split(' ').pop());
-            if (l === 'end_header') { headerEnd = i + 1; break; }
+        const buf = await file.arrayBuffer();
+        const bytes = new Uint8Array(buf);
+
+        // Decode header (always ASCII) by scanning until "end_header\n"
+        let headerStr = '';
+        let headerByteEnd = -1;
+        const maxScan = Math.min(bytes.length, 1 << 20); // up to 1 MB header
+        for (let i = 0; i < maxScan; i++) {
+            headerStr += String.fromCharCode(bytes[i]);
+            if (headerStr.endsWith('end_header\n') || headerStr.endsWith('end_header\r\n')) {
+                headerByteEnd = i + 1;
+                break;
+            }
+        }
+        if (headerByteEnd < 0) throw new Error('Hlavička PLY nenájdená (end_header).');
+
+        const headerLines = headerStr.split(/\r?\n/);
+        let format = 'ascii';
+        let n = 0;
+        const props = []; // { name, type }
+        let inVertex = false;
+        for (const raw of headerLines) {
+            const l = raw.trim();
+            if (l.startsWith('format')) {
+                const f = l.split(/\s+/)[1] || 'ascii';
+                if (f === 'ascii') format = 'ascii';
+                else if (f === 'binary_little_endian') format = 'le';
+                else if (f === 'binary_big_endian') format = 'be';
+                else throw new Error('Neznámy formát: ' + f);
+            } else if (l.startsWith('element vertex')) {
+                n = parseInt(l.split(/\s+/)[2]);
+                inVertex = true;
+            } else if (l.startsWith('element ')) {
+                inVertex = false;
+            } else if (l.startsWith('property') && inVertex) {
+                const parts = l.split(/\s+/);
+                // property <type> <name>   OR   property list <itype> <type> <name>
+                if (parts[1] === 'list') continue;
+                props.push({ type: parts[1], name: parts[2] });
+            }
         }
         if (!n) throw new Error('Žiadne vertices v hlavičke');
-        hasColor = props.includes('red') || props.includes('r');
-        setProg(50);
+        setProg(40);
+
+        // Build property index
+        const idx = {};
+        for (let i = 0; i < props.length; i++) idx[props[i].name] = i;
+        const xi = idx.x, yi = idx.y, zi = idx.z;
+        if (xi === undefined || yi === undefined || zi === undefined)
+            throw new Error('Chýbajú x/y/z properties.');
+
+        const hasRGB = idx.red !== undefined && idx.green !== undefined && idx.blue !== undefined;
+        const hasGS  = idx.f_dc_0 !== undefined && idx.f_dc_1 !== undefined && idx.f_dc_2 !== undefined;
+
+        // Read all vertex rows into 2D array `data`
+        const data = new Array(n);
+        if (format === 'ascii') {
+            const txt = new TextDecoder().decode(bytes.subarray(headerByteEnd));
+            const lines = txt.split(/\r?\n/);
+            let row = 0;
+            for (let i = 0; i < lines.length && row < n; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+                data[row++] = line.split(/\s+/).map(Number);
+            }
+            if (row < n) throw new Error(`Očakával ${n} vertices, načítaných ${row}.`);
+        } else {
+            // Binary: compute stride and per-property byte offsets
+            const sizeOf = { char:1, uchar:1, int8:1, uint8:1,
+                             short:2, ushort:2, int16:2, uint16:2,
+                             int:4, uint:4, int32:4, uint32:4,
+                             float:4, float32:4, double:8, float64:8 };
+            let stride = 0;
+            const off = [];
+            for (const p of props) {
+                const s = sizeOf[p.type];
+                if (!s) throw new Error('Neznámy typ property: ' + p.type);
+                off.push(stride);
+                stride += s;
+            }
+            const expected = headerByteEnd + stride * n;
+            if (expected > bytes.length)
+                throw new Error(`Súbor je menší než hlavička sľubuje (${expected} > ${bytes.length}).`);
+
+            const dv = new DataView(buf);
+            const le = format === 'le';
+            const readers = props.map(p => {
+                switch (p.type) {
+                    case 'char': case 'int8':   return (o)=>dv.getInt8(o);
+                    case 'uchar': case 'uint8': return (o)=>dv.getUint8(o);
+                    case 'short': case 'int16': return (o)=>dv.getInt16(o, le);
+                    case 'ushort': case 'uint16': return (o)=>dv.getUint16(o, le);
+                    case 'int': case 'int32':   return (o)=>dv.getInt32(o, le);
+                    case 'uint': case 'uint32': return (o)=>dv.getUint32(o, le);
+                    case 'float': case 'float32': return (o)=>dv.getFloat32(o, le);
+                    case 'double': case 'float64': return (o)=>dv.getFloat64(o, le);
+                }
+            });
+            for (let r = 0; r < n; r++) {
+                const base = headerByteEnd + r * stride;
+                const row = new Array(props.length);
+                for (let p = 0; p < props.length; p++) row[p] = readers[p](base + off[p]);
+                data[r] = row;
+            }
+        }
+        setProg(70);
 
         const positions = new Float32Array(n * 3);
         const colors = new Float32Array(n * 3);
@@ -1401,27 +1502,33 @@ async function processPLY(file) {
         const normals = new Float32Array(n * 3);
 
         let xmn=Infinity, xmx=-Infinity, ymn=Infinity, ymx=-Infinity, zmn=Infinity, zmx=-Infinity;
-        const data = [];
         for (let i = 0; i < n; i++) {
-            const parts = lines[headerEnd + i].trim().split(/\s+/).map(Number);
-            data.push(parts);
-            if (parts[0] < xmn) xmn = parts[0]; if (parts[0] > xmx) xmx = parts[0];
-            if (parts[1] < ymn) ymn = parts[1]; if (parts[1] > ymx) ymx = parts[1];
-            if (parts[2] < zmn) zmn = parts[2]; if (parts[2] > zmx) zmx = parts[2];
+            const p = data[i];
+            const x = p[xi], y = p[yi], z = p[zi];
+            if (x < xmn) xmn = x; if (x > xmx) xmx = x;
+            if (y < ymn) ymn = y; if (y > ymx) ymx = y;
+            if (z < zmn) zmn = z; if (z > zmx) zmx = z;
         }
         const cx = (xmn+xmx)/2, cy = (ymn+ymx)/2, cz = (zmn+zmx)/2;
         const sc = 2 / Math.max(xmx-xmn, ymx-ymn, zmx-zmn || 1);
+        const SH_C0 = 0.28209479177387814;
+        const sigmoid = v => 1 / (1 + Math.exp(-v));
+
         for (let i = 0; i < n; i++) {
             const p = data[i];
-            positions[i*3]   = (p[0] - cx) * sc;
-            positions[i*3+1] = (p[1] - cy) * sc;
+            positions[i*3]   = (p[xi] - cx) * sc;
+            positions[i*3+1] = (p[yi] - cy) * sc;
             positions[i*3+2] = 0;
-            depths[i] = 0.5 + ((p[2] - cz) * sc) * 0.5;
-            if (hasColor) {
-                const ri = props.indexOf('red'), gi = props.indexOf('green'), bi = props.indexOf('blue');
-                colors[i*3]   = (p[ri] || 200)/255;
-                colors[i*3+1] = (p[gi] || 200)/255;
-                colors[i*3+2] = (p[bi] || 255)/255;
+            depths[i] = 0.5 + ((p[zi] - cz) * sc) * 0.5;
+            if (hasRGB) {
+                colors[i*3]   = p[idx.red]   / 255;
+                colors[i*3+1] = p[idx.green] / 255;
+                colors[i*3+2] = p[idx.blue]  / 255;
+            } else if (hasGS) {
+                // 3D Gaussian Splatting: convert SH DC component to RGB
+                colors[i*3]   = Math.min(1, Math.max(0, 0.5 + SH_C0 * p[idx.f_dc_0]));
+                colors[i*3+1] = Math.min(1, Math.max(0, 0.5 + SH_C0 * p[idx.f_dc_1]));
+                colors[i*3+2] = Math.min(1, Math.max(0, 0.5 + SH_C0 * p[idx.f_dc_2]));
             } else {
                 colors[i*3] = 0.4; colors[i*3+1] = 0.85; colors[i*3+2] = 1.0;
             }
@@ -1432,7 +1539,8 @@ async function processPLY(file) {
         const cloud = { positions, colors, depths, normals, count: n, aspect: 1 };
         lastCloud = cloud;
         uploadCloud(cloud);
-        showViewer(file.name.replace(/\.[^.]+$/, ''), `.PLY · ${n.toLocaleString()} bodov`);
+        const fmtLabel = format === 'ascii' ? 'ASCII' : (format === 'le' ? 'BIN-LE' : 'BIN-BE');
+        showViewer(file.name.replace(/\.[^.]+$/, ''), `.PLY ${fmtLabel} · ${n.toLocaleString()} bodov`);
         showToast('PLY načítané — rovnaký renderer ako AI scény.', true);
     } catch (e) {
         console.error(e);
