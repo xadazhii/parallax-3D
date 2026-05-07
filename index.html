@@ -285,7 +285,8 @@ video.preview-vid.show{display:block}
             <input type="range" id="vidScrub" class="scrub" min="0" max="100" step="0.5" value="0" style="display:none">
             <div class="actions">
                 <button class="btn" onclick="document.getElementById('videoInput').click()">↑ Vybrať video</button>
-                <button class="btn alt" id="vidProcessBtn" style="display:none">⚡ Spracovať snímok</button>
+                <button class="btn alt" id="vidProcessBtn" style="display:none">⚡ Snímok</button>
+                <button class="btn alt" id="vidAnimBtn" style="display:none">▶ 3D Video</button>
             </div>
             <input type="file" id="videoInput" accept="video/*">
         </div>
@@ -1451,26 +1452,95 @@ function loadVideoPreview(file) {
     v.onloadedmetadata = () => {
         $('vidScrub').style.display = 'block';
         $('vidProcessBtn').style.display = 'inline-block';
+        $('vidAnimBtn').style.display = 'inline-block';
         $('vidScrub').max = v.duration.toFixed(1);
         v.currentTime = Math.min(0.5, v.duration * 0.1);
     };
     $('vidScrub').oninput = e => { v.currentTime = parseFloat(e.target.value); };
 }
+async function grabVideoFrame(v, quality = 0.85) {
+    const cv = document.createElement('canvas');
+    cv.width = v.videoWidth; cv.height = v.videoHeight;
+    cv.getContext('2d').drawImage(v, 0, 0);
+    const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', quality));
+    if (!blob) throw new Error('toBlob returned null');
+    return new File([blob], 'frame.jpg', { type: 'image/jpeg' });
+}
+
 $('vidProcessBtn').addEventListener('click', async () => {
     if (!_vidFile) return;
     const v = $('vidPreview');
     if (!v.videoWidth || !v.videoHeight) {
         showToast('Video sa ešte nenačítalo, počkaj sekundu.'); return;
     }
-    const cv = document.createElement('canvas');
-    cv.width = v.videoWidth; cv.height = v.videoHeight;
-    cv.getContext('2d').drawImage(v, 0, 0);
-    const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.92));
-    if (!blob) { showToast('Nepodarilo sa získať snímok z videa.'); return; }
-    const f = new File([blob], _vidFile.name.replace(/\.[^.]+$/, '') + '_frame.jpg', { type: 'image/jpeg' });
-    v.pause();
-    processFile(f);
+    try {
+        const f = await grabVideoFrame(v, 0.92);
+        v.pause();
+        processFile(f);
+    } catch (e) {
+        showToast('Nepodarilo sa získať snímok: ' + e.message);
+    }
 });
+
+// 3D Video playback: advance video with audio, rebuild cloud per frame
+let _vidPlaying = false, _vidProcessing = false;
+
+$('vidAnimBtn').addEventListener('click', async () => {
+    if (!_vidFile) return;
+    const v = $('vidPreview');
+    if (!v.videoWidth || !v.videoHeight) {
+        showToast('Video sa ešte nenačítalo, počkaj sekundu.'); return;
+    }
+
+    // First frame: full processFile path so the viewer is set up properly
+    try {
+        const firstFrame = await grabVideoFrame(v, 0.85);
+        await processFile(firstFrame);
+    } catch (e) {
+        showToast('Chyba prvého snímku: ' + e.message); return;
+    }
+
+    // Now play video (with audio) and stream subsequent frames into the cloud
+    _vidPlaying = true;
+    v.muted = false;
+    v.playbackRate = 0.5;     // slow enough for depth model to keep up
+    try { await v.play(); } catch (e) { /* autoplay blocked is fine — user clicked */ }
+
+    $('liveTag').innerHTML = '<div class="live-dot"></div>3D · Video';
+    $('liveTag').classList.add('show');
+    showToast('3D video sa prehráva (0.5×) — sleduj scénu, ktorá sa hýbe v čase.', true);
+
+    while (_vidPlaying && !v.ended) {
+        if (!_vidProcessing && !v.paused) {
+            _vidProcessing = true;
+            try {
+                const f = await grabVideoFrame(v, 0.78);
+                const result = await estimateDepth(f);
+                const cloud = await buildCloud(f, result);
+                uploadCloud(cloud);
+                $('infoMeta').textContent =
+                    `3D Video · t=${v.currentTime.toFixed(1)}s · ${cloud.count.toLocaleString()} bodov · ${_device.toUpperCase()}`;
+            } catch (e) {
+                console.warn('Frame skipped:', e);
+            }
+            _vidProcessing = false;
+        }
+        await new Promise(r => requestAnimationFrame(r));
+    }
+
+    if (v.ended) {
+        showToast('Video skončilo. Klikni „Nová fotka" pre reštart.', true);
+        $('infoMeta').textContent = $('infoMeta').textContent.replace(/^3D Video[^·]*·\s*/, '3D Video · END · ');
+    }
+    _vidPlaying = false;
+    v.muted = true;
+});
+
+function stopVideoAnim() {
+    _vidPlaying = false;
+    const v = $('vidPreview');
+    if (v) { try { v.pause(); v.muted = true; } catch (_) {} }
+}
 
 // ─────────────────────────────────────────────────────────────
 //  TEXT MODE — render text to canvas, points = pixels, animated wave
@@ -1764,6 +1834,7 @@ async function processFile(file) {
 function reset() {
     stopLive();
     stopMic();
+    stopVideoAnim();
     if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
     cloudCount = 0;
     waveAnim = false;
