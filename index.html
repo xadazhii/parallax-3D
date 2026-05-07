@@ -10,6 +10,7 @@
 body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;
     overflow:hidden;width:100vw;height:100vh;user-select:none}
 canvas{position:fixed;inset:0;width:100%;height:100%}
+input[type="file"]{display:none}
 #bg{z-index:0}
 #gl{z-index:1;display:none}
 
@@ -345,7 +346,7 @@ video.preview-vid.show{display:block}
 </div>
 
 <!-- ── VIEWER UI ── -->
-<button id="newBtn" onclick="window.parallax.reset()">⬡ &nbsp;Nová fotka</button>
+<button id="newBtn" onclick="window.parallax.reset()">⬡ &nbsp;Nová scéna</button>
 <div id="liveTag"><div class="live-dot"></div>Live · Webcam</div>
 <div id="info"><div id="infoName">—</div><div id="infoMeta">Depth Anything V2</div></div>
 <div id="hint">
@@ -1546,16 +1547,45 @@ function stopVideoAnim() {
 //  TEXT MODE — render text to canvas, points = pixels, animated wave
 // ─────────────────────────────────────────────────────────────
 function processText(text) {
-    const W = 480, H = 160;
+    const W = 720, H = 360;
+    const margin = 24;
+    const maxW = W - margin * 2;
+    const maxH = H - margin * 2;
     const cv = document.createElement('canvas');
     cv.width = W; cv.height = H;
     const ctx = cv.getContext('2d');
+
+    // Fit largest font that allows word-wrapped text to fit within (maxW, maxH)
+    const words = text.trim().split(/\s+/).filter(Boolean);
+    let fontSize = 140, lines = null;
+    while (fontSize >= 18) {
+        ctx.font = `bold ${fontSize}px "Segoe UI", system-ui, sans-serif`;
+        // Greedy word wrap; bail out if any single word wider than maxW
+        let candidate = [], cur = '', overflow = false;
+        for (const w of words) {
+            if (ctx.measureText(w).width > maxW) { overflow = true; break; }
+            const trial = cur ? cur + ' ' + w : w;
+            if (ctx.measureText(trial).width <= maxW) cur = trial;
+            else { candidate.push(cur); cur = w; }
+        }
+        if (overflow) { fontSize -= 8; continue; }
+        if (cur) candidate.push(cur);
+        const lineH = fontSize * 1.18;
+        if (candidate.length * lineH <= maxH) { lines = candidate; break; }
+        fontSize -= 8;
+    }
+    if (!lines || !lines.length) { showToast('Text je prázdny alebo príliš dlhý.'); return; }
+
     ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 110px "Segoe UI", system-ui, sans-serif';
+    ctx.font = `bold ${fontSize}px "Segoe UI", system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(text, W/2, H/2);
+    const lineH = fontSize * 1.18;
+    const startY = H/2 - (lines.length - 1) * lineH / 2;
+    for (let i = 0; i < lines.length; i++) {
+        ctx.fillText(lines[i], W/2, startY + i * lineH);
+    }
     const data = ctx.getImageData(0, 0, W, H).data;
 
     const pts = [];
