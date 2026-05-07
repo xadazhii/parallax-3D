@@ -1485,6 +1485,28 @@ $('vidProcessBtn').addEventListener('click', async () => {
 
 // 3D Video playback: advance video with audio, rebuild cloud per frame
 let _vidPlaying = false, _vidProcessing = false;
+let _vidOrigParent = null;
+
+// Browsers pause / throttle <video> inside an ancestor with display:none.
+// Move the element to a body-level host while animating so currentTime advances.
+function detachVideoForPlayback(v) {
+    if (_vidOrigParent) return;
+    _vidOrigParent = v.parentElement;
+    let host = $('vidPlayHost');
+    if (!host) {
+        host = document.createElement('div');
+        host.id = 'vidPlayHost';
+        host.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:2px;height:2px;overflow:hidden;pointer-events:none;opacity:0';
+        document.body.appendChild(host);
+    }
+    host.appendChild(v);
+}
+function reattachVideo(v) {
+    if (_vidOrigParent) {
+        try { _vidOrigParent.appendChild(v); } catch (_) {}
+        _vidOrigParent = null;
+    }
+}
 
 $('vidAnimBtn').addEventListener('click', async () => {
     if (!_vidFile) return;
@@ -1493,6 +1515,10 @@ $('vidAnimBtn').addEventListener('click', async () => {
         showToast('Video sa ešte nenačítalo, počkaj sekundu.'); return;
     }
 
+    // Move video into a body-level host BEFORE processFile hides #upload,
+    // so the browser keeps the element active and currentTime advances.
+    detachVideoForPlayback(v);
+
     // First frame: full processFile path so the viewer is set up properly
     const origName = _vidFile.name.replace(/\.[^.]+$/, '');
     try {
@@ -1500,6 +1526,7 @@ $('vidAnimBtn').addEventListener('click', async () => {
         await processFile(firstFrame);
         $('infoName').textContent = origName; // override "frame" with real video name
     } catch (e) {
+        reattachVideo(v);
         showToast('Chyba prvého snímku: ' + e.message); return;
     }
 
@@ -1548,7 +1575,10 @@ $('vidAnimBtn').addEventListener('click', async () => {
 function stopVideoAnim() {
     _vidPlaying = false;
     const v = $('vidPreview');
-    if (v) { try { v.pause(); v.muted = true; } catch (_) {} }
+    if (v) {
+        try { v.pause(); v.muted = true; v.loop = false; } catch (_) {}
+        reattachVideo(v);
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
