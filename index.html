@@ -1503,37 +1503,45 @@ $('vidAnimBtn').addEventListener('click', async () => {
         showToast('Chyba prvého snímku: ' + e.message); return;
     }
 
-    // Loop video so the scene keeps evolving until user resets
+    // Loop video so the scene keeps evolving until user resets.
+    // Keep muted: avoids autoplay-with-audio rejection, especially on file://.
     v.loop = true;
-    v.currentTime = 0;
+    v.muted = true;
+    v.playbackRate = 0.5;
     _vidPlaying = true;
-    v.muted = false;
-    v.playbackRate = 0.5;     // slow enough for depth model to keep up
-    try { await v.play(); } catch (e) { /* autoplay blocked is fine — user clicked */ }
+    try { await v.play(); }
+    catch (e) {
+        showToast('Prehrávanie zablokované: ' + e.message);
+        _vidPlaying = false; return;
+    }
 
     $('liveTag').innerHTML = '<div class="live-dot"></div>3D · Video · LOOP';
     $('liveTag').classList.add('show');
     showToast('3D video sa prehráva v slučke (0.5×). Stop = „Nová scéna".', true);
 
     while (_vidPlaying) {
-        if (!_vidProcessing && !v.paused) {
-            _vidProcessing = true;
-            try {
-                const f = await grabVideoFrame(v, 0.78);
-                const result = await estimateDepth(f);
-                const cloud = await buildCloud(f, result);
-                uploadCloud(cloud);
-                $('infoMeta').textContent =
-                    `3D Video · t=${v.currentTime.toFixed(1)}s / ${v.duration.toFixed(1)}s · ${cloud.count.toLocaleString()} bodov · ${_device.toUpperCase()}`;
-            } catch (e) {
-                console.warn('Frame skipped:', e);
-            }
-            _vidProcessing = false;
+        // Skip until video has a real frame ready
+        if (_vidProcessing || v.paused || !v.videoWidth || v.readyState < 2) {
+            await new Promise(r => requestAnimationFrame(r));
+            continue;
         }
+        _vidProcessing = true;
+        try {
+            const f = await grabVideoFrame(v, 0.78);
+            const result = await estimateDepth(f);
+            const cloud = await buildCloud(f, result);
+            uploadCloud(cloud);
+            $('infoMeta').textContent =
+                `3D Video · t=${v.currentTime.toFixed(1)}s / ${v.duration.toFixed(1)}s · ${cloud.count.toLocaleString()} bodov · ${_device.toUpperCase()}`;
+        } catch (e) {
+            console.warn('Frame skipped:', e);
+        }
+        _vidProcessing = false;
+        // Yield twice so the render rAF gets at least one tick before next heavy frame
+        await new Promise(r => requestAnimationFrame(r));
         await new Promise(r => requestAnimationFrame(r));
     }
 
-    v.muted = true;
     v.loop = false;
 });
 
