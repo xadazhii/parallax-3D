@@ -190,6 +190,7 @@ video.preview-vid.show{display:block}
 .scrub{width:100%;margin:10px 0;accent-color:var(--cyan)}
 
 @media(max-width:600px){
+    .hero{margin-top:48px}
     .hero-title{font-size:36px;letter-spacing:8px}
     .drop{padding:24px 18px}
     #controls{gap:8px;padding:8px 12px}
@@ -199,6 +200,14 @@ video.preview-vid.show{display:block}
     #depthMini{width:90px;height:90px}
     #hint{font-size:9px}
     .tab{padding:6px 10px;font-size:9px;letter-spacing:1px}
+    .tabs{flex-wrap:wrap;max-width:calc(100vw - 24px)}
+    .back-btn{padding:7px 12px;gap:0}
+    .back-btn span:last-child{display:none}
+    #newBtn{padding:7px 14px;font-size:0;letter-spacing:0;gap:0}
+    #newBtn.show::before{content:'⬡';font-size:14px;color:var(--cyan);line-height:1}
+    #info{max-width:42vw}
+    #infoName{font-size:11px;max-width:42vw}
+    #infoMeta{display:none}
 }
 </style>
 </head>
